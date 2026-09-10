@@ -27,6 +27,6 @@ services:
     build: .
     restart: unless-stopped
     depends_on: [api]
-    ports: ["3000:3000"]
+    ports: ["3007:3000"]
 volumes:
   btb_postgres:
