@@ -1,7 +1,24 @@
 import asyncio
 from collections import defaultdict
 from dataclasses import dataclass
+from time import monotonic
 from .client import SleeperClient
+
+
+PLAYER_CACHE_SECONDS = 24 * 60 * 60
+_player_cache: dict[str, dict] | None = None
+_player_cache_expires_at = 0.0
+_player_cache_lock = asyncio.Lock()
+
+
+@dataclass(frozen=True)
+class SleeperPlayer:
+    player_id: str
+    name: str
+    position: str
+    team: str | None
+    injury_status: str | None
+    points: float | None
 
 
 @dataclass(frozen=True)
@@ -17,6 +34,10 @@ class SleeperMatchup:
     team_b_owner: str
     team_a_record: str
     team_b_record: str
+    team_a_starters: tuple[SleeperPlayer, ...] = ()
+    team_a_bench: tuple[SleeperPlayer, ...] = ()
+    team_b_starters: tuple[SleeperPlayer, ...] = ()
+    team_b_bench: tuple[SleeperPlayer, ...] = ()
 
 
 class SleeperService:
@@ -24,12 +45,39 @@ class SleeperService:
     def __init__(self, client: SleeperClient | None = None):
         self.client = client or SleeperClient()
 
-    async def weekly_matchups(self, league_id: str, week: int) -> list[SleeperMatchup]:
+    async def _players(self) -> dict[str, dict]:
+        global _player_cache, _player_cache_expires_at
+        now = monotonic()
+        if _player_cache is not None and now < _player_cache_expires_at:
+            return _player_cache
+        async with _player_cache_lock:
+            now = monotonic()
+            if _player_cache is not None and now < _player_cache_expires_at:
+                return _player_cache
+            try:
+                catalog = await self.client.players()
+            except Exception:
+                # Player names are preferable to stale data, but stale names
+                # are preferable to taking the predictions page offline.
+                if _player_cache is not None:
+                    return _player_cache
+                raise
+            kept_fields = ("full_name", "first_name", "last_name", "position", "fantasy_positions", "team", "injury_status")
+            _player_cache = {
+                str(player_id): {field: details.get(field) for field in kept_fields}
+                for player_id, details in catalog.items()
+                if isinstance(details, dict)
+            }
+            _player_cache_expires_at = monotonic() + PLAYER_CACHE_SECONDS
+            return catalog
+
+    async def weekly_matchups(self, league_id: str, week: int, include_players: bool = False) -> list[SleeperMatchup]:
         rows, rosters, users = await asyncio.gather(
             self.client.matchups(league_id, week),
             self.client.rosters(league_id),
             self.client.users(league_id),
         )
+        catalog = await self._players() if include_players else {}
         user_by_id = {str(user["user_id"]): user for user in users}
         roster_by_id = {int(roster["roster_id"]): roster for roster in rosters}
 
@@ -45,6 +93,42 @@ class SleeperService:
                 record += f"–{settings['ties']}"
             return team_name, owner_name, record
 
+        def player(player_id: object, points: dict) -> SleeperPlayer:
+            key = str(player_id)
+            details = catalog.get(key) or {}
+            position = details.get("position") or next(iter(details.get("fantasy_positions") or []), None)
+            if not position and key.isalpha() and len(key) <= 4:
+                position = "DEF"
+            first_name = details.get("first_name") or ""
+            last_name = details.get("last_name") or ""
+            name = details.get("full_name") or f"{first_name} {last_name}".strip()
+            if not name:
+                name = f"{key} D/ST" if position == "DEF" else f"Player {key}"
+            raw_points = points.get(key)
+            return SleeperPlayer(
+                player_id=key,
+                name=name,
+                position=position or "—",
+                team=details.get("team") or (key if position == "DEF" else None),
+                injury_status=details.get("injury_status"),
+                points=float(raw_points) if raw_points is not None else None,
+            )
+
+        def lineup(row: dict) -> tuple[tuple[SleeperPlayer, ...], tuple[SleeperPlayer, ...]]:
+            if not include_players:
+                return (), ()
+            starter_ids = [str(value) for value in row.get("starters") or [] if value and str(value) != "0"]
+            starter_set = set(starter_ids)
+            all_ids = [str(value) for value in row.get("players") or [] if value and str(value) != "0"]
+            points = row.get("players_points") or {}
+            starters = tuple(player(value, points) for value in starter_ids)
+            position_order = {"QB": 0, "RB": 1, "WR": 2, "TE": 3, "K": 4, "DEF": 5}
+            bench = tuple(sorted(
+                (player(value, points) for value in all_ids if value not in starter_set),
+                key=lambda value: (position_order.get(value.position, 99), value.name),
+            ))
+            return starters, bench
+
         groups: dict[int, list[dict]] = defaultdict(list)
         for row in rows:
             if row.get("matchup_id") is not None:
@@ -55,7 +139,14 @@ class SleeperService:
                 roster_a, roster_b = int(pair[0]["roster_id"]), int(pair[1]["roster_id"])
                 team_a, owner_a, record_a = identity(roster_a)
                 team_b, owner_b, record_b = identity(roster_b)
-                result.append(SleeperMatchup(matchup_id, roster_a, roster_b, pair[0].get("points"), pair[1].get("points"), team_a, team_b, owner_a, owner_b, record_a, record_b))
+                starters_a, bench_a = lineup(pair[0])
+                starters_b, bench_b = lineup(pair[1])
+                result.append(SleeperMatchup(
+                    matchup_id, roster_a, roster_b,
+                    pair[0].get("points"), pair[1].get("points"),
+                    team_a, team_b, owner_a, owner_b, record_a, record_b,
+                    starters_a, bench_a, starters_b, bench_b,
+                ))
         return sorted(result, key=lambda item: item.matchup_id)
 
     async def current_week(self) -> int:

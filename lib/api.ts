@@ -1,7 +1,8 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
 
 export type CurrentUser = { id: string; username: string; display_name: string; role: "user" | "admin" };
-export type LiveTeam = { roster_id: number; name: string; owner: string; record: string; score: number | null };
+export type LivePlayer = { player_id: string; name: string; position: string; team: string | null; injury_status: string | null; points: number | null };
+export type LiveTeam = { roster_id: number; name: string; owner: string; record: string; score: number | null; starters?: LivePlayer[]; bench?: LivePlayer[] };
 export type LiveMatchup = { id: string; sleeper_matchup_id: number; team_a: LiveTeam; team_b: LiveTeam; winner_roster_id: number | null };
 export type LiveWeek = {
   season: { id: string; year: number };

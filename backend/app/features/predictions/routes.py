@@ -10,7 +10,7 @@ from app.database.session import get_db
 from app.features.predictions.models import Prediction, PredictionMatchup, PredictionWeek, WeekStatus
 from app.models.user import User
 from app.models.season import Season
-from app.services.sleeper import SleeperService
+from app.services.sleeper import SleeperMatchup, SleeperPlayer, SleeperService
 
 router = APIRouter(prefix="/predictions", tags=["predictions"])
 
@@ -37,7 +37,7 @@ def _utc(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
-async def _sync_current(db: AsyncSession) -> tuple[Season, PredictionWeek]:
+async def _sync_current(db: AsyncSession, include_rosters: bool = False) -> tuple[Season, PredictionWeek, list[SleeperMatchup]]:
     season = await db.scalar(select(Season).where(Season.is_active.is_(True)))
     if not season:
         raise HTTPException(status_code=503, detail="No active BTB season is configured. Set SLEEPER_LEAGUE_ID and restart the backend.")
@@ -48,8 +48,8 @@ async def _sync_current(db: AsyncSession) -> tuple[Season, PredictionWeek]:
         week = PredictionWeek(season_id=season.id, week_number=week_number, lock_at=_default_lock_at(), status=WeekStatus.open)
         db.add(week)
         await db.flush()
+    incoming = await sleeper.weekly_matchups(season.sleeper_league_id, week_number, include_players=include_rosters)
     if week.status is not WeekStatus.final:
-        incoming = await sleeper.weekly_matchups(season.sleeper_league_id, week_number)
         existing = {m.sleeper_matchup_id: m for m in (await db.scalars(select(PredictionMatchup).where(PredictionMatchup.week_id == week.id))).all()}
         for item in incoming:
             matchup = existing.get(item.matchup_id)
@@ -60,22 +60,50 @@ async def _sync_current(db: AsyncSession) -> tuple[Season, PredictionWeek]:
             else:
                 db.add(PredictionMatchup(week_id=week.id, sleeper_matchup_id=item.matchup_id, **values))
         await db.commit()
-    return season, week
+    return season, week, incoming
 
 
 @router.get("/current")
-async def current_week(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
-    season, week = await _sync_current(db)
+async def current_week(include_rosters: bool = False, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    season, week, live_matchups = await _sync_current(db, include_rosters)
     matchups = (await db.scalars(select(PredictionMatchup).where(PredictionMatchup.week_id == week.id).order_by(PredictionMatchup.sleeper_matchup_id))).all()
     picks_query = select(Prediction).where(Prediction.matchup_id.in_([m.id for m in matchups]))
     public = datetime.now(timezone.utc) >= _utc(week.lock_at)
     if not public:
         picks_query = picks_query.where(Prediction.user_id == user.id)
     picks = (await db.scalars(picks_query)).all()
+    live_by_matchup = {item.matchup_id: item for item in live_matchups}
+
+    def players_payload(players: tuple[SleeperPlayer, ...]) -> list[dict]:
+        return [{
+            "player_id": player.player_id,
+            "name": player.name,
+            "position": player.position,
+            "team": player.team,
+            "injury_status": player.injury_status,
+            "points": player.points,
+        } for player in players]
+
+    def team_payload(matchup: PredictionMatchup, side: str) -> dict:
+        live = live_by_matchup.get(matchup.sleeper_matchup_id)
+        roster_id = getattr(matchup, f"team_{side}_roster_id")
+        live_side = "a" if live and live.roster_a == roster_id else "b"
+        result = {
+            "roster_id": roster_id,
+            "name": getattr(matchup, f"team_{side}_name"),
+            "owner": getattr(matchup, f"team_{side}_owner"),
+            "record": getattr(matchup, f"team_{side}_record"),
+            "score": getattr(matchup, f"team_{side}_score"),
+        }
+        if include_rosters and live:
+            result["starters"] = players_payload(getattr(live, f"team_{live_side}_starters"))
+            result["bench"] = players_payload(getattr(live, f"team_{live_side}_bench"))
+        return result
+
     return {
         "season": {"id": season.id, "year": season.year},
         "week": {"id": week.id, "number": week.week_number, "status": week.status.value, "lock_at": week.lock_at, "picks_public": public},
-        "matchups": [{"id": m.id, "sleeper_matchup_id": m.sleeper_matchup_id, "team_a": {"roster_id": m.team_a_roster_id, "name": m.team_a_name, "owner": m.team_a_owner, "record": m.team_a_record, "score": m.team_a_score}, "team_b": {"roster_id": m.team_b_roster_id, "name": m.team_b_name, "owner": m.team_b_owner, "record": m.team_b_record, "score": m.team_b_score}, "winner_roster_id": m.winner_roster_id} for m in matchups],
+        "matchups": [{"id": m.id, "sleeper_matchup_id": m.sleeper_matchup_id, "team_a": team_payload(m, "a"), "team_b": team_payload(m, "b"), "winner_roster_id": m.winner_roster_id} for m in matchups],
         "picks": [{"user_id": p.user_id, "matchup_id": p.matchup_id, "selected_roster_id": p.selected_roster_id, "result": p.result.value if p.result else None} for p in picks],
     }
 
