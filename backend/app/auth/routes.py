@@ -21,6 +21,11 @@ class SetupRequest(BaseModel):
     password: str = Field(min_length=12, max_length=128)
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(max_length=128)
+    new_password: str = Field(min_length=12, max_length=128)
+
+
 @router.post("/login")
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     username = body.username.strip().lower()
@@ -49,3 +54,20 @@ async def setup_account(body: SetupRequest, db: AsyncSession = Depends(get_db)):
 @router.get("/me")
 async def me(user: User = Depends(current_user)):
     return {"id": user.id, "username": user.username, "display_name": user.display_name, "role": user.role.value}
+
+
+@router.post("/change-password")
+async def change_password(
+    body: ChangePasswordRequest,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not user.password_hash or not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if verify_password(body.new_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="New password must be different from the current password")
+    user.password_hash = hash_password(body.new_password)
+    user.setup_token_hash = None
+    user.setup_token_expires_at = None
+    await db.commit()
+    return {"message": "Password changed"}

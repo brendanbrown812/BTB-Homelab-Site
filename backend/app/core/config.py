@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./btb-local.db"
     local_create_schema: bool = True
     secret_key: str = "change-me"
-    access_token_minutes: int = 720
+    access_token_minutes: int = 60 * 24 * 30
     sleeper_base_url: str = "https://api.sleeper.app/v1"
     sleeper_league_id: str = ""
     season_year: int = 2026

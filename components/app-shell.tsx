@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { BarChart3, CalendarDays, History, LogOut, Menu, ShieldCheck, Trophy, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { ChangePasswordDialog } from "@/components/change-password-dialog";
 import { apiFetch, CurrentUser, getToken } from "@/lib/api";
 
 const items = [
@@ -33,5 +34,5 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   </div>;
 }
 
-function Account({ user, onLogout }: { user: CurrentUser; onLogout: () => void }) { const initials = user.display_name.split(" ").map(v => v[0]).join("").slice(0, 2).toUpperCase(); return <div className="mb-5 rounded-2xl border border-white/8 bg-white/[.03] p-3"><div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-full bg-[#24334b] text-sm font-bold text-primary">{initials}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{user.display_name}</p><p className="text-xs capitalize text-slate-500">{user.role}</p></div><button onClick={onLogout} title="Sign out" aria-label="Sign out" className="rounded-lg p-2 text-slate-500 hover:bg-white/5 hover:text-white"><LogOut className="h-4 w-4" /></button></div></div>; }
+function Account({ user, onLogout }: { user: CurrentUser; onLogout: () => void }) { const initials = user.display_name.split(" ").map(v => v[0]).join("").slice(0, 2).toUpperCase(); return <div className="mb-5 rounded-2xl border border-white/8 bg-white/[.03] p-3"><div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-full bg-[#24334b] text-sm font-bold text-primary">{initials}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{user.display_name}</p><p className="text-xs capitalize text-slate-500">{user.role}</p></div><button onClick={onLogout} title="Sign out" aria-label="Sign out" className="rounded-lg p-2 text-slate-500 hover:bg-white/5 hover:text-white"><LogOut className="h-4 w-4" /></button></div><ChangePasswordDialog /></div>; }
 function Brand() { return <Link href="/predictions" className="flex h-[84px] items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-[13px] bg-primary font-black tracking-[-.08em] text-primary-foreground">BTB</span><span><span className="block text-[17px] font-extrabold tracking-tight">BTB League</span><span className="block text-xs text-slate-500">League home</span></span></Link>; }

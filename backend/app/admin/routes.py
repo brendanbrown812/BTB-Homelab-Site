@@ -1,10 +1,9 @@
-from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import admin_user
-from app.core.security import create_setup_token
+from app.core.security import generate_password, hash_password
 from app.database.session import get_db
 from app.models.user import User, UserRole
 
@@ -28,9 +27,14 @@ async def create_user(body: CreateUser, db: AsyncSession = Depends(get_db)):
     username = body.username.lower()
     if await db.scalar(select(User).where(User.username == username)):
         raise HTTPException(status_code=409, detail="That username already exists")
-    raw, digest = create_setup_token()
-    user = User(username=username, display_name=body.display_name, role=body.role, setup_token_hash=digest, setup_token_expires_at=datetime.now(timezone.utc) + timedelta(hours=48))
+    generated_password = generate_password()
+    user = User(
+        username=username,
+        display_name=body.display_name,
+        role=body.role,
+        password_hash=hash_password(generated_password),
+    )
     db.add(user)
     await db.commit()
     await db.refresh(user)
-    return {"id": user.id, "setup_token": raw, "expires_in_hours": 48}
+    return {"id": user.id, "generated_password": generated_password}

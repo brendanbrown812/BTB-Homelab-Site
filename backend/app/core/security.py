@@ -16,6 +16,11 @@ def verify_password(password: str, hashed: str) -> bool:
     return password_hash.verify(password, hashed)
 
 
+def generate_password() -> str:
+    """Create a shareable high-entropy password that is shown only once."""
+    return secrets.token_urlsafe(18)
+
+
 def create_access_token(user_id: str, role: str) -> str:
     settings = get_settings()
     expires = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_minutes)

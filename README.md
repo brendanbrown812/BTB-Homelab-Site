@@ -5,7 +5,7 @@ BTB is a private, homelab-friendly website for one fantasy football league. The 
 ## Included
 
 - Admin-created BTB accounts with `user` and `admin` roles
-- One-time account setup credentials and Argon2 password hashing
+- Commissioner-generated account passwords, self-service password changes, and Argon2 hashing
 - BTB-wide `Season` model and reusable Sleeper service
 - Six-matchup prediction cards with editable picks until lock
 - Private picks before lock, shared picks afterward
@@ -36,7 +36,7 @@ Sleeper is the source of truth for fantasy matchups and scores. PostgreSQL is th
 3. Replace `POSTGRES_PASSWORD`, `SECRET_KEY`, and `BOOTSTRAP_ADMIN_PASSWORD` with long random values.
 4. Run `docker compose up --build`.
 5. Open `http://localhost:3000` and sign in using `BOOTSTRAP_ADMIN_USERNAME` (defaults to `admin`) and `BOOTSTRAP_ADMIN_PASSWORD`.
-6. In **Admin → BTB accounts**, create your permanent admin account and use its one-time setup link to choose a password.
+6. In **Admin → BTB accounts**, create your permanent admin account, copy its generated password, and sign in with it.
 7. Clear `BOOTSTRAP_ADMIN_PASSWORD` in `.env` and restart the API. This disables the environment bootstrap account.
 
 The API applies migrations at startup. PostgreSQL data lives in the `btb_postgres` volume.
@@ -51,7 +51,7 @@ On Windows, double-click `run-local.bat`. The first run creates or updates `.env
 - start the API and frontend in separate command windows; and
 - open the site at `http://localhost:5173`.
 
-Sign in with username `admin` and the `BOOTSTRAP_ADMIN_PASSWORD` value. Create your permanent account in **Admin → BTB accounts**, complete its one-time setup link, then clear the bootstrap password and restart BTB.
+Sign in with username `admin` and the `BOOTSTRAP_ADMIN_PASSWORD` value. Create your permanent account in **Admin → BTB accounts**, copy its generated password, then clear the bootstrap password and restart BTB.
 
 To stop the local site, close the **BTB Backend** and **BTB Frontend** command windows.
 
@@ -64,8 +64,9 @@ All prediction screens use the authenticated BTB API. The API refreshes the acti
 ## Security
 
 - There is no public registration endpoint.
-- Setup credentials are stored only as SHA-256 digests and expire.
-- Passwords are hashed with Argon2.
+- Generated passwords are returned only in the account-creation response and are never stored as plaintext.
+- Passwords are hashed with Argon2, and signed-in users can change their own password by confirming the current one.
+- New sign-ins remain valid for 30 days by default; `ACCESS_TOKEN_MINUTES` can override that duration.
 - The environment bootstrap account is marked separately and is disabled when `BOOTSTRAP_ADMIN_PASSWORD` is cleared.
 - Change every example secret before exposing the service.
 - Put the deployment behind HTTPS and a trusted reverse proxy.
