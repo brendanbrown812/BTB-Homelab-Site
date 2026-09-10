@@ -1,0 +1,5 @@
+import Link from "next/link";
+import { KeyRound } from "lucide-react";
+import { SetupForm } from "@/components/auth-forms";
+
+export default function SetupAccountPage() { return <main className="grid min-h-screen place-items-center px-5"><section className="w-full max-w-[440px]"><Link href="/" className="mx-auto mb-8 flex w-fit items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-[14px] bg-primary font-black tracking-[-.08em] text-primary-foreground">BTB</span><span className="text-xl font-black">BTB League</span></Link><div className="rounded-3xl border border-white/9 bg-card p-7 shadow-2xl"><div className="mb-6 grid h-11 w-11 place-items-center rounded-xl bg-primary/10 text-primary"><KeyRound className="h-5 w-5" /></div><h1 className="text-2xl font-black tracking-tight">Set up your account</h1><p className="mt-1 text-sm leading-relaxed text-slate-400">Choose the password you’ll use across the BTB site. This setup link can only be used once.</p><SetupForm /></div></section></main>; }

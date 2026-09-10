@@ -1,0 +1,30 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "../vendor/shadcn-tailwind-4.13.0.css";
+
+:root {
+  --background: #080b12; --foreground: #f7f8fb; --card: #111722; --card-foreground: #f7f8fb;
+  --popover: #111722; --popover-foreground: #f7f8fb; --primary: #ffcd3c; --primary-foreground: #151005;
+  --secondary: #1b2432; --secondary-foreground: #f7f8fb; --muted: #151c28; --muted-foreground: #929eb0;
+  --accent: #253248; --accent-foreground: #ffffff; --destructive: #f25757; --border: #273144;
+  --input: #303b50; --ring: #ffcd3c; --chart-1: #ffcd3c; --chart-2: #5ed6b3; --chart-3: #5f8cff;
+  --chart-4: #ff875f; --chart-5: #c693ff; --radius: .9rem; --sidebar: #0c111b; --sidebar-foreground: #dce2ec;
+  --sidebar-primary: #ffcd3c; --sidebar-primary-foreground: #151005; --sidebar-accent: #192233;
+  --sidebar-accent-foreground: #fff; --sidebar-border: #222c3e; --sidebar-ring: #ffcd3c;
+}
+@theme inline {
+  --color-background: var(--background); --color-foreground: var(--foreground); --color-card: var(--card); --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover); --color-popover-foreground: var(--popover-foreground); --color-primary: var(--primary); --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary); --color-secondary-foreground: var(--secondary-foreground); --color-muted: var(--muted); --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent); --color-accent-foreground: var(--accent-foreground); --color-destructive: var(--destructive); --color-border: var(--border);
+  --color-input: var(--input); --color-ring: var(--ring); --color-chart-1: var(--chart-1); --color-chart-2: var(--chart-2); --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4); --color-chart-5: var(--chart-5); --color-sidebar: var(--sidebar); --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary); --color-sidebar-primary-foreground: var(--sidebar-primary-foreground); --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground); --color-sidebar-border: var(--sidebar-border); --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 5px); --radius-md: calc(var(--radius) - 3px); --radius-lg: var(--radius); --radius-xl: calc(var(--radius) + 5px);
+}
+* { border-color: var(--border); }
+html { background: var(--background); }
+body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 78% -15%, rgb(55 77 118 / 24%), transparent 34rem), var(--background); color: var(--foreground); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+button, a { -webkit-tap-highlight-color: transparent; }
+::selection { background: #ffcd3c; color: #151005; }

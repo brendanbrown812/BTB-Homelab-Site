@@ -1,0 +1,1 @@
+"""Weekly prediction feature."""

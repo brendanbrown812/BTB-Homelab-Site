@@ -1,0 +1,1 @@
+"""BTB League API."""

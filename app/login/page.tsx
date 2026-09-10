@@ -1,0 +1,5 @@
+import Link from "next/link";
+import { LockKeyhole } from "lucide-react";
+import { LoginForm } from "@/components/auth-forms";
+
+export default function LoginPage() { return <main className="grid min-h-screen place-items-center px-5"><section className="w-full max-w-[420px]"><Link href="/predictions" className="mx-auto mb-8 flex w-fit items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-[14px] bg-primary font-black tracking-[-.08em] text-primary-foreground">BTB</span><span className="text-xl font-black">BTB League</span></Link><div className="rounded-3xl border border-white/9 bg-card p-7 shadow-2xl"><div className="mb-6 grid h-11 w-11 place-items-center rounded-xl bg-white/5 text-primary"><LockKeyhole className="h-5 w-5" /></div><h1 className="text-2xl font-black tracking-tight">Welcome back</h1><p className="mt-1 text-sm text-slate-400">Sign in with your BTB account.</p><LoginForm /><p className="mt-5 text-center text-xs text-slate-500">Accounts are created by the BTB commissioner.</p></div></section></main>; }
