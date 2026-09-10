@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- Sleeper CDN URLs are dynamic and need client-side error fallbacks. */
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, CircleAlert, LoaderCircle, RefreshCw, Save } from "lucide-react";
+import { Check, ChevronDown, CircleAlert, LoaderCircle, RefreshCw, Save } from "lucide-react";
 import { apiFetch, LivePlayer, LiveTeam, LiveWeek } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -92,17 +92,19 @@ export function PredictionBoard() {
 type Matchup = LiveWeek["matchups"][number];
 
 function MatchupCard({ matchup, locked, selectedRosterId, onSelect }: { matchup: Matchup; locked: boolean; selectedRosterId?: number; onSelect: (rosterId: number) => void }) {
+  const [benchOpen, setBenchOpen] = useState(false);
+
   return <article className="overflow-hidden rounded-2xl border border-white/9 bg-card">
     <div className="flex items-center justify-between border-b border-white/7 px-5 py-3 text-xs font-medium text-slate-500"><span>SLEEPER MATCHUP {matchup.sleeper_matchup_id}</span><span>{matchup.team_a.score ?? "—"} – {matchup.team_b.score ?? "—"}</span></div>
     <div className="grid lg:grid-cols-[minmax(0,1fr)_48px_minmax(0,1fr)]">
-      <TeamPanel team={matchup.team_a} locked={locked} selected={selectedRosterId === matchup.team_a.roster_id} onSelect={() => onSelect(matchup.team_a.roster_id)} />
+      <TeamPanel team={matchup.team_a} locked={locked} selected={selectedRosterId === matchup.team_a.roster_id} onSelect={() => onSelect(matchup.team_a.roster_id)} benchOpen={benchOpen} onToggleBench={() => setBenchOpen(current => !current)} />
       <div className="flex items-center justify-center border-y border-white/7 py-2 text-[11px] font-bold text-slate-600 lg:border-x lg:border-y-0 lg:py-0">VS</div>
-      <TeamPanel team={matchup.team_b} locked={locked} selected={selectedRosterId === matchup.team_b.roster_id} onSelect={() => onSelect(matchup.team_b.roster_id)} />
+      <TeamPanel team={matchup.team_b} locked={locked} selected={selectedRosterId === matchup.team_b.roster_id} onSelect={() => onSelect(matchup.team_b.roster_id)} benchOpen={benchOpen} onToggleBench={() => setBenchOpen(current => !current)} />
     </div>
   </article>;
 }
 
-function TeamPanel({ team, locked, selected, onSelect }: { team: LiveTeam; locked: boolean; selected: boolean; onSelect: () => void }) {
+function TeamPanel({ team, locked, selected, onSelect, benchOpen, onToggleBench }: { team: LiveTeam; locked: boolean; selected: boolean; onSelect: () => void; benchOpen: boolean; onToggleBench: () => void }) {
   const initials = team.name.split(" ").map(value => value[0]).join("").slice(0, 2).toUpperCase();
   return <section className="min-w-0">
     <button disabled={locked} onClick={onSelect} aria-pressed={selected} className={`group relative flex w-full items-center gap-4 px-5 py-5 text-left transition disabled:cursor-default ${selected ? "bg-primary/[.09]" : !locked ? "hover:bg-white/[.025]" : ""}`}>
@@ -112,9 +114,33 @@ function TeamPanel({ team, locked, selected, onSelect }: { team: LiveTeam; locke
     </button>
     <div className="border-t border-white/7">
       <RosterSection label="Starters" players={team.starters ?? []} />
-      <RosterSection label="Bench" players={team.bench ?? []} muted />
+      <BenchSection players={team.bench ?? []} rosterId={team.roster_id} open={benchOpen} onToggle={onToggleBench} />
     </div>
   </section>;
+}
+
+function BenchSection({ players, rosterId, open, onToggle }: { players: LivePlayer[]; rosterId: number; open: boolean; onToggle: () => void }) {
+  const contentId = `bench-${rosterId}`;
+
+  return <div className="border-t border-white/6 bg-black/10">
+    <button
+      type="button"
+      disabled={!players.length}
+      aria-expanded={open}
+      aria-controls={contentId}
+      onClick={onToggle}
+      className="flex w-full items-center justify-between px-5 py-3 text-left transition hover:bg-white/[.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary disabled:cursor-default disabled:hover:bg-transparent"
+    >
+      <span className="text-[11px] font-bold uppercase tracking-[.14em] text-slate-500">Bench · {players.length}</span>
+      <span className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.12em] text-slate-600">
+        {players.length ? (open ? "Hide" : "Show") : "Empty"}
+        {players.length > 0 && <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />}
+      </span>
+    </button>
+    {open && <div id={contentId} className="divide-y divide-white/5 border-t border-white/6">
+      {players.map(player => <PlayerRow key={player.player_id} player={player} muted />)}
+    </div>}
+  </div>;
 }
 
 function RosterSection({ label, players, muted = false }: { label: string; players: LivePlayer[]; muted?: boolean }) {
