@@ -10,6 +10,12 @@ export type LiveWeek = {
   matchups: LiveMatchup[];
   picks: Array<{ user_id: string; matchup_id: string; selected_roster_id: number | null; result: "win" | "loss" | "push" | null }>;
 };
+export type CurrentSubmissionStatus = {
+  season: number;
+  week: number;
+  total_matchups: number;
+  users: Array<{ user_id: string; display_name: string; submitted_picks: number }>;
+};
 
 export function getToken() { return typeof window === "undefined" ? null : localStorage.getItem("btb_access_token"); }
 

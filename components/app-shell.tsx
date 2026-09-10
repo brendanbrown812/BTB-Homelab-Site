@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, CalendarDays, History, LogOut, Menu, ShieldCheck, Trophy, X } from "lucide-react";
+import { BarChart3, CalendarDays, ClipboardCheck, History, LogOut, Menu, ShieldCheck, Trophy, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
@@ -27,7 +27,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   function logout() { localStorage.removeItem("btb_access_token"); router.replace("/login"); }
   if (!user) return <main className="grid min-h-screen place-items-center"><div className="text-center"><span className="mx-auto mb-4 grid h-11 w-11 animate-pulse place-items-center rounded-[14px] bg-primary font-black text-primary-foreground">BTB</span><p className="text-sm text-slate-500">Checking your account…</p></div></main>;
 
-  const nav = <><div className="px-3 pb-3 pt-8 text-xs font-semibold uppercase tracking-[.18em] text-slate-500">Predictions</div>{items.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setOpen(false)} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] transition ${path === href ? "bg-primary font-semibold text-primary-foreground" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><Icon className="h-[18px] w-[18px]" />{label}</Link>)}{user.role === "admin" && <div className="mt-6 border-t border-white/8 pt-4"><Link href="/admin" onClick={() => setOpen(false)} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] ${path.startsWith("/admin") ? "bg-primary font-semibold text-primary-foreground" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><ShieldCheck className="h-[18px] w-[18px]" />Admin</Link></div>}</>;
+  const nav = <><div className="px-3 pb-3 pt-8 text-xs font-semibold uppercase tracking-[.18em] text-slate-500">Predictions</div>{items.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setOpen(false)} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] transition ${path === href ? "bg-primary font-semibold text-primary-foreground" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><Icon className="h-[18px] w-[18px]" />{label}</Link>)}{user.role === "admin" && <div className="mt-6 space-y-1 border-t border-white/8 pt-4"><Link href="/admin" onClick={() => setOpen(false)} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] ${path === "/admin" ? "bg-primary font-semibold text-primary-foreground" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><ShieldCheck className="h-[18px] w-[18px]" />Admin</Link><Link href="/admin/submissions" onClick={() => setOpen(false)} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] ${path === "/admin/submissions" ? "bg-primary font-semibold text-primary-foreground" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><ClipboardCheck className="h-[18px] w-[18px]" />Pick status</Link></div>}</>;
 
   return <div className="min-h-screen lg:grid lg:grid-cols-[245px_1fr]">
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[245px] flex-col border-r border-white/8 bg-[#0b1019]/95 px-4 lg:flex"><Brand /><nav className="flex-1">{nav}</nav><Account user={user} onLogout={logout} /></aside>

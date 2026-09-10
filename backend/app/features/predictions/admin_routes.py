@@ -1,17 +1,57 @@
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import admin_user
 from app.database.session import get_db
 from app.features.predictions.models import Prediction, PredictionMatchup, PredictionWeek, WeekStatus
+from app.features.predictions.routes import _sync_current
 from app.features.predictions.service import score_pick
 from app.models.season import Season
 from app.models.user import User
 from app.services.sleeper import SleeperService
 
 router = APIRouter(prefix="/admin/predictions", tags=["admin predictions"], dependencies=[Depends(admin_user)])
+
+
+@router.get("/current/submissions")
+async def current_submission_status(admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)):
+    season, week, _ = await _sync_current(db)
+    total_matchups = await db.scalar(
+        select(func.count(PredictionMatchup.id)).where(PredictionMatchup.week_id == week.id)
+    ) or 0
+    submitted_count = (
+        select(func.count(Prediction.id))
+        .join(PredictionMatchup, PredictionMatchup.id == Prediction.matchup_id)
+        .where(
+            Prediction.user_id == User.id,
+            PredictionMatchup.week_id == week.id,
+            Prediction.selected_roster_id.is_not(None),
+        )
+        .correlate(User)
+        .scalar_subquery()
+    )
+    rows = (
+        await db.execute(
+            select(User.id, User.display_name, submitted_count.label("submitted_picks"))
+            .where(User.is_active.is_(True), User.id != admin.id)
+            .order_by(User.display_name)
+        )
+    ).all()
+    return {
+        "season": season.year,
+        "week": week.week_number,
+        "total_matchups": total_matchups,
+        "users": [
+            {
+                "user_id": row.id,
+                "display_name": row.display_name,
+                "submitted_picks": row.submitted_picks,
+            }
+            for row in rows
+        ],
+    }
 
 
 @router.post("/weeks/{week_id}/refresh")
