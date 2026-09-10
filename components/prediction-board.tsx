@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element -- Sleeper CDN URLs are dynamic and need client-side error fallbacks. */
+
 import { useEffect, useMemo, useState } from "react";
 import { Check, CircleAlert, LoaderCircle, RefreshCw, Save } from "lucide-react";
 import { apiFetch, LivePlayer, LiveTeam, LiveWeek } from "@/lib/api";
@@ -105,7 +107,7 @@ function TeamPanel({ team, locked, selected, onSelect }: { team: LiveTeam; locke
   return <section className="min-w-0">
     <button disabled={locked} onClick={onSelect} aria-pressed={selected} className={`group relative flex w-full items-center gap-4 px-5 py-5 text-left transition disabled:cursor-default ${selected ? "bg-primary/[.09]" : !locked ? "hover:bg-white/[.025]" : ""}`}>
       {selected && <span className="absolute right-4 top-4 grid h-6 w-6 place-items-center rounded-full bg-primary text-primary-foreground"><Check className="h-3.5 w-3.5" /></span>}
-      <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl border text-sm font-black ${selected ? "border-primary bg-primary text-primary-foreground" : "border-white/10 bg-[#1b2535] text-slate-300"}`}>{initials}</span>
+      <TeamAvatar url={team.avatar_url} initials={initials} selected={selected} />
       <span className="min-w-0 pr-7"><span className="block truncate text-[15px] font-bold leading-tight text-white">{team.name}</span><span className="mt-1 block truncate text-xs text-slate-500">{team.owner} · {team.record}</span><span className={`mt-2 block text-xs font-semibold ${selected ? "text-primary" : "text-slate-500"}`}>{selected ? "Your pick" : locked ? "Not selected" : "Select winner"}</span></span>
     </button>
     <div className="border-t border-white/7">
@@ -123,11 +125,26 @@ function RosterSection({ label, players, muted = false }: { label: string; playe
 }
 
 function PlayerRow({ player, muted }: { player: LivePlayer; muted: boolean }) {
-  return <div className={`grid grid-cols-[42px_minmax(0,1fr)_auto] items-center gap-3 px-5 py-2.5 ${muted ? "text-slate-400" : ""}`}>
-    <span className="rounded-md bg-white/5 px-1.5 py-1 text-center text-[10px] font-bold text-slate-400">{player.position}</span>
-    <div className="min-w-0"><p className={`truncate text-sm font-semibold ${muted ? "text-slate-300" : "text-slate-100"}`}>{player.name}</p><p className="mt-0.5 truncate text-[11px] text-slate-600">{player.team ?? "Free agent"}{player.injury_status ? <span className="text-amber-400"> · {player.injury_status}</span> : null}</p></div>
+  return <div className={`grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 px-5 py-2.5 ${muted ? "text-slate-400" : ""}`}>
+    <PlayerAvatar player={player} />
+    <div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><span className="shrink-0 rounded-md bg-white/5 px-1.5 py-0.5 text-[9px] font-bold text-slate-400">{player.position}</span><p className={`truncate text-sm font-semibold ${muted ? "text-slate-300" : "text-slate-100"}`}>{player.name}</p></div><p className="mt-0.5 truncate text-[11px] text-slate-600">{player.team ?? "Free agent"}{player.injury_status ? <span className="text-amber-400"> · {player.injury_status}</span> : null}</p></div>
     <span className={`tabular-nums text-sm font-semibold ${player.points && player.points > 0 ? "text-primary" : "text-slate-500"}`}>{player.points === null ? "—" : player.points.toFixed(1)}</span>
   </div>;
+}
+
+function TeamAvatar({ url, initials, selected }: { url?: string | null; initials: string; selected: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const style = selected ? "border-primary bg-primary text-primary-foreground" : "border-white/10 bg-[#1b2535] text-slate-300";
+  return <span className={`grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl border text-sm font-black ${style}`}>
+    {url && !failed ? <img src={url} alt="" loading="lazy" className="h-full w-full object-cover" onError={() => setFailed(true)} /> : initials}
+  </span>;
+}
+
+function PlayerAvatar({ player }: { player: LivePlayer }) {
+  const [failed, setFailed] = useState(false);
+  return <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border border-white/8 bg-[#1b2535] text-[9px] font-bold text-slate-500">
+    {player.image_url && !failed ? <img src={player.image_url} alt="" loading="lazy" className="h-full w-full object-cover" onError={() => setFailed(true)} /> : player.position}
+  </span>;
 }
 
 function State({ title, detail, children }: { title: string; detail: string; children: React.ReactNode }) {

@@ -82,6 +82,7 @@ async def current_week(include_rosters: bool = False, user: User = Depends(curre
             "team": player.team,
             "injury_status": player.injury_status,
             "points": player.points,
+            "image_url": player.image_url,
         } for player in players]
 
     def team_payload(matchup: PredictionMatchup, side: str) -> dict:
@@ -94,6 +95,7 @@ async def current_week(include_rosters: bool = False, user: User = Depends(curre
             "owner": getattr(matchup, f"team_{side}_owner"),
             "record": getattr(matchup, f"team_{side}_record"),
             "score": getattr(matchup, f"team_{side}_score"),
+            "avatar_url": getattr(live, f"team_{live_side}_avatar_url") if live else None,
         }
         if include_rosters and live:
             result["starters"] = players_payload(getattr(live, f"team_{live_side}_starters"))

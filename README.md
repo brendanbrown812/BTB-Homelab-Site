@@ -8,7 +8,7 @@ BTB is a private, homelab-friendly website for one fantasy football league. The 
 - Commissioner-generated account passwords, self-service password changes, and Argon2 hashing
 - BTB-wide `Season` model and reusable Sleeper service
 - Six-matchup prediction cards with editable picks until lock
-- Full Sleeper starters and benches with player names, positions, teams, injuries, and weekly points
+- Full Sleeper starters and benches with player and team images, names, positions, teams, injuries, and weekly points
 - Private picks before lock, shared picks afterward
 - Automatic win/loss/push scoring; blank picks score as losses
 - Weekly records, standings, history, and champions

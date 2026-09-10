@@ -19,6 +19,7 @@ class SleeperPlayer:
     team: str | None
     injury_status: str | None
     points: float | None
+    image_url: str | None
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,8 @@ class SleeperMatchup:
     team_b_owner: str
     team_a_record: str
     team_b_record: str
+    team_a_avatar_url: str | None = None
+    team_b_avatar_url: str | None = None
     team_a_starters: tuple[SleeperPlayer, ...] = ()
     team_a_bench: tuple[SleeperPlayer, ...] = ()
     team_b_starters: tuple[SleeperPlayer, ...] = ()
@@ -81,7 +84,7 @@ class SleeperService:
         user_by_id = {str(user["user_id"]): user for user in users}
         roster_by_id = {int(roster["roster_id"]): roster for roster in rosters}
 
-        def identity(roster_id: int) -> tuple[str, str, str]:
+        def identity(roster_id: int) -> tuple[str, str, str, str | None]:
             roster = roster_by_id.get(roster_id, {})
             owner = user_by_id.get(str(roster.get("owner_id")), {})
             metadata = owner.get("metadata") or {}
@@ -91,7 +94,9 @@ class SleeperService:
             record = f"{settings.get('wins', 0)}–{settings.get('losses', 0)}"
             if settings.get("ties", 0):
                 record += f"–{settings['ties']}"
-            return team_name, owner_name, record
+            avatar_id = owner.get("avatar")
+            avatar_url = f"https://sleepercdn.com/avatars/thumbs/{avatar_id}" if avatar_id else None
+            return team_name, owner_name, record, avatar_url
 
         def player(player_id: object, points: dict) -> SleeperPlayer:
             key = str(player_id)
@@ -112,6 +117,7 @@ class SleeperService:
                 team=details.get("team") or (key if position == "DEF" else None),
                 injury_status=details.get("injury_status"),
                 points=float(raw_points) if raw_points is not None else None,
+                image_url=f"https://sleepercdn.com/content/nfl/players/thumb/{key}.jpg" if key.isdigit() else None,
             )
 
         def lineup(row: dict) -> tuple[tuple[SleeperPlayer, ...], tuple[SleeperPlayer, ...]]:
@@ -137,15 +143,28 @@ class SleeperService:
         for matchup_id, pair in groups.items():
             if len(pair) == 2:
                 roster_a, roster_b = int(pair[0]["roster_id"]), int(pair[1]["roster_id"])
-                team_a, owner_a, record_a = identity(roster_a)
-                team_b, owner_b, record_b = identity(roster_b)
+                team_a, owner_a, record_a, avatar_a = identity(roster_a)
+                team_b, owner_b, record_b, avatar_b = identity(roster_b)
                 starters_a, bench_a = lineup(pair[0])
                 starters_b, bench_b = lineup(pair[1])
                 result.append(SleeperMatchup(
-                    matchup_id, roster_a, roster_b,
-                    pair[0].get("points"), pair[1].get("points"),
-                    team_a, team_b, owner_a, owner_b, record_a, record_b,
-                    starters_a, bench_a, starters_b, bench_b,
+                    matchup_id=matchup_id,
+                    roster_a=roster_a,
+                    roster_b=roster_b,
+                    score_a=pair[0].get("points"),
+                    score_b=pair[1].get("points"),
+                    team_a_name=team_a,
+                    team_b_name=team_b,
+                    team_a_owner=owner_a,
+                    team_b_owner=owner_b,
+                    team_a_record=record_a,
+                    team_b_record=record_b,
+                    team_a_avatar_url=avatar_a,
+                    team_b_avatar_url=avatar_b,
+                    team_a_starters=starters_a,
+                    team_a_bench=bench_a,
+                    team_b_starters=starters_b,
+                    team_b_bench=bench_b,
                 ))
         return sorted(result, key=lambda item: item.matchup_id)
 
