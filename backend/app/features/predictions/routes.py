@@ -13,6 +13,7 @@ from app.models.season import Season
 from app.services.sleeper import SleeperMatchup, SleeperPlayer, SleeperService
 
 router = APIRouter(prefix="/predictions", tags=["predictions"])
+CENTRAL_TIME = ZoneInfo("America/Chicago")
 
 
 class PickInput(BaseModel):
@@ -24,9 +25,9 @@ class PickCard(BaseModel):
     picks: list[PickInput]
 
 
-def _default_lock_at() -> datetime:
-    now = datetime.now(ZoneInfo("America/Chicago"))
-    days = (3 - now.weekday()) % 7
+def _default_lock_at(now: datetime | None = None) -> datetime:
+    now = now.astimezone(CENTRAL_TIME) if now else datetime.now(CENTRAL_TIME)
+    days = (4 - now.weekday()) % 7
     candidate = datetime.combine((now + timedelta(days=days)).date(), time(19, 0), tzinfo=now.tzinfo)
     if candidate <= now:
         candidate += timedelta(days=7)
@@ -35,6 +36,15 @@ def _default_lock_at() -> datetime:
 
 def _utc(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _migrate_thursday_lock_to_friday(week: PredictionWeek) -> bool:
+    local_lock = _utc(week.lock_at).astimezone(CENTRAL_TIME)
+    if week.status is not WeekStatus.open or local_lock.weekday() != 3:
+        return False
+    friday = datetime.combine(local_lock.date() + timedelta(days=1), time(19, 0), tzinfo=CENTRAL_TIME)
+    week.lock_at = friday.astimezone(timezone.utc)
+    return True
 
 
 async def _sync_current(db: AsyncSession, include_rosters: bool = False) -> tuple[Season, PredictionWeek, list[SleeperMatchup]]:
@@ -48,6 +58,8 @@ async def _sync_current(db: AsyncSession, include_rosters: bool = False) -> tupl
         week = PredictionWeek(season_id=season.id, week_number=week_number, lock_at=_default_lock_at(), status=WeekStatus.open)
         db.add(week)
         await db.flush()
+    else:
+        _migrate_thursday_lock_to_friday(week)
     incoming = await sleeper.weekly_matchups(season.sleeper_league_id, week_number, include_players=include_rosters)
     if week.status is not WeekStatus.final:
         existing = {m.sleeper_matchup_id: m for m in (await db.scalars(select(PredictionMatchup).where(PredictionMatchup.week_id == week.id))).all()}
