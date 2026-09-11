@@ -16,6 +16,23 @@ export type CurrentSubmissionStatus = {
   total_matchups: number;
   users: Array<{ user_id: string; display_name: string; submitted_picks: number }>;
 };
+export type PTGWriteup = {
+  id: string;
+  year: number;
+  week: number;
+  content_html: string;
+  author: { id: string; display_name: string };
+  updated_at: string;
+  submitted_by_author?: boolean;
+  is_published?: boolean;
+  has_content?: boolean;
+};
+export type PTGWriteupList = {
+  year: number;
+  is_admin_view: boolean;
+  available_years: number[];
+  writeups: Array<Omit<PTGWriteup, "content_html">>;
+};
 
 export function getToken() { return typeof window === "undefined" ? null : localStorage.getItem("btb_access_token"); }
 
@@ -30,5 +47,6 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     const body = await response.json().catch(() => ({}));
     throw new Error(body.detail ?? `Request failed (${response.status})`);
   }
+  if (response.status === 204) return undefined as T;
   return response.json();
 }

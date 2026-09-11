@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from sqlalchemy import select
+from sqlalchemy import inspect, select, text
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.auth.routes import router as auth_router
@@ -9,6 +9,7 @@ from app.database.base import Base
 from app.database.session import SessionLocal, engine
 from app.features.predictions.routes import router as predictions_router
 from app.features.predictions.admin_routes import router as admin_predictions_router
+from app.features.ptgotw.routes import router as ptgotw_router
 from app.models.season import Season
 from app.models.user import User, UserRole
 from app.core.security import hash_password, verify_password
@@ -16,11 +17,23 @@ from app.core.security import hash_password, verify_password
 settings = get_settings()
 
 
+def _ensure_local_schema_columns(connection):
+    inspector = inspect(connection)
+    users_columns = {column["name"] for column in inspector.get_columns("users")}
+    if "is_deleted" not in users_columns:
+        connection.execute(text("ALTER TABLE users ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT 0"))
+    if "ptgotw_writeups" in inspector.get_table_names():
+        writeup_columns = {column["name"] for column in inspector.get_columns("ptgotw_writeups")}
+        if "is_published" not in writeup_columns:
+            connection.execute(text("ALTER TABLE ptgotw_writeups ADD COLUMN is_published BOOLEAN NOT NULL DEFAULT 1"))
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     if settings.local_create_schema:
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
+            await connection.run_sync(_ensure_local_schema_columns)
     if settings.sleeper_league_id and settings.sleeper_league_id != "put-your-sleeper-league-id-here":
         async with SessionLocal() as db:
             season = await db.scalar(select(Season).where(Season.year == settings.season_year))
@@ -83,6 +96,7 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(predictions_router, prefix="/api")
 app.include_router(admin_predictions_router, prefix="/api")
+app.include_router(ptgotw_router, prefix="/api")
 
 
 @app.get("/api/health")
