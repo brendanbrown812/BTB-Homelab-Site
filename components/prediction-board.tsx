@@ -97,18 +97,18 @@ function MatchupCard({ matchup, locked, selectedRosterId, onSelect }: { matchup:
   const scoreBreakdownAvailable = Boolean(matchup.team_a.starters?.length || matchup.team_b.starters?.length);
 
   return <article className="overflow-hidden rounded-2xl border border-white/9 bg-card">
-    <div className="flex items-center justify-between border-b border-white/7 px-5 py-3 text-xs font-medium text-slate-500"><span>SLEEPER MATCHUP {matchup.sleeper_matchup_id}</span><button type="button" disabled={!scoreBreakdownAvailable} aria-expanded={scoreOpen} onClick={() => setScoreOpen(current => !current)} className="flex items-center gap-1.5 rounded-md text-slate-400 underline decoration-white/20 decoration-dashed underline-offset-4 transition hover:text-white disabled:no-underline disabled:hover:text-slate-400" title={scoreBreakdownAvailable ? "Show player point breakdown" : "Player point breakdown unavailable"}><span>{matchup.team_a.score ?? "—"} – {matchup.team_b.score ?? "—"}</span>{scoreBreakdownAvailable && <ChevronDown className={`h-3.5 w-3.5 transition-transform ${scoreOpen ? "rotate-180" : ""}`} />}</button></div>
+    <div className="flex items-center justify-between gap-2 border-b border-white/7 px-3 py-3 text-[10px] font-medium text-slate-500 sm:px-5 sm:text-xs"><span>SLEEPER MATCHUP {matchup.sleeper_matchup_id}</span><button type="button" disabled={!scoreBreakdownAvailable} aria-expanded={scoreOpen} onClick={() => setScoreOpen(current => !current)} className="flex shrink-0 items-center gap-1.5 rounded-md text-slate-400 underline decoration-white/20 decoration-dashed underline-offset-4 transition hover:text-white disabled:no-underline disabled:hover:text-slate-400" title={scoreBreakdownAvailable ? "Show player point breakdown" : "Player point breakdown unavailable"}><span>{matchup.team_a.score ?? "—"} – {matchup.team_b.score ?? "—"}</span>{scoreBreakdownAvailable && <ChevronDown className={`h-3.5 w-3.5 transition-transform ${scoreOpen ? "rotate-180" : ""}`} />}</button></div>
     {scoreOpen && <ScoreBreakdown matchup={matchup} />}
-    <div className="grid lg:grid-cols-[minmax(0,1fr)_48px_minmax(0,1fr)]">
+    <div className="grid grid-cols-[minmax(0,1fr)_28px_minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_48px_minmax(0,1fr)]">
       <TeamPanel team={matchup.team_a} locked={locked} selected={selectedRosterId === matchup.team_a.roster_id} onSelect={() => onSelect(matchup.team_a.roster_id)} benchOpen={benchOpen} onToggleBench={() => setBenchOpen(current => !current)} />
-      <div className="flex items-center justify-center border-y border-white/7 py-2 text-[11px] font-bold text-slate-600 lg:border-x lg:border-y-0 lg:py-0">VS</div>
+      <div className="flex items-center justify-center border-x border-white/7 text-[10px] font-bold text-slate-600 sm:text-[11px]">VS</div>
       <TeamPanel team={matchup.team_b} locked={locked} selected={selectedRosterId === matchup.team_b.roster_id} onSelect={() => onSelect(matchup.team_b.roster_id)} benchOpen={benchOpen} onToggleBench={() => setBenchOpen(current => !current)} />
     </div>
   </article>;
 }
 
 function ScoreBreakdown({ matchup }: { matchup: Matchup }) {
-  return <section className="grid divide-y divide-white/7 border-b border-white/7 bg-black/10 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+  return <section className="grid grid-cols-2 divide-x divide-white/7 border-b border-white/7 bg-black/10">
     <TeamScoreBreakdown team={matchup.team_a} />
     <TeamScoreBreakdown team={matchup.team_b} />
   </section>;
@@ -116,9 +116,9 @@ function ScoreBreakdown({ matchup }: { matchup: Matchup }) {
 
 function TeamScoreBreakdown({ team }: { team: LiveTeam }) {
   const starters = team.starters ?? [];
-  return <div className="min-w-0 px-5 py-4">
-    <div className="mb-3 flex items-center justify-between gap-3"><h3 className="truncate text-sm font-bold text-slate-200">{team.name}</h3><span className="text-lg font-black tabular-nums text-primary">{team.score === null ? "—" : team.score.toFixed(2)}</span></div>
-    <div className="divide-y divide-white/5 rounded-xl border border-white/7 bg-white/[.02]">{starters.map(player => <div key={player.player_id} className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-2.5 px-3 py-2"><PlayerAvatar player={player} compact /><div className="min-w-0"><p className="truncate text-xs font-semibold text-slate-300">{player.name}</p><p className="text-[10px] text-slate-600">{player.position} · {player.team ?? "FA"}</p></div><span className="text-xs font-bold tabular-nums text-slate-300">{player.points === null ? "—" : player.points.toFixed(2)}</span></div>)}</div>
+  return <div className="min-w-0 px-2 py-3 sm:px-5 sm:py-4">
+    <div className="mb-3 flex items-center justify-between gap-1.5 sm:gap-3"><h3 className="truncate text-[11px] font-bold text-slate-200 sm:text-sm">{team.name}</h3><span className="text-sm font-black tabular-nums text-primary sm:text-lg">{team.score === null ? "—" : team.score.toFixed(2)}</span></div>
+    <div className="divide-y divide-white/5 overflow-hidden rounded-lg border border-white/7 bg-white/[.02] sm:rounded-xl">{starters.map(player => <div key={player.player_id} className="grid grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-1 px-1.5 py-2 sm:grid-cols-[28px_minmax(0,1fr)_auto] sm:gap-2.5 sm:px-3"><PlayerAvatar player={player} compact /><div className="min-w-0"><p className="truncate text-[10px] font-semibold text-slate-300 sm:text-xs">{player.name}</p><p className="text-[8px] text-slate-600 sm:text-[10px]">{player.position} · {player.team ?? "FA"}</p></div><span className="text-[10px] font-bold tabular-nums text-slate-300 sm:text-xs">{player.points === null ? "—" : player.points.toFixed(2)}</span></div>)}</div>
     {!starters.some(player => player.points !== null) && <p className="mt-2 text-[11px] text-slate-600">Sleeper has not posted player point totals yet.</p>}
   </div>;
 }
@@ -126,10 +126,10 @@ function TeamScoreBreakdown({ team }: { team: LiveTeam }) {
 function TeamPanel({ team, locked, selected, onSelect, benchOpen, onToggleBench }: { team: LiveTeam; locked: boolean; selected: boolean; onSelect: () => void; benchOpen: boolean; onToggleBench: () => void }) {
   const initials = team.name.split(" ").map(value => value[0]).join("").slice(0, 2).toUpperCase();
   return <section className="min-w-0">
-    <button disabled={locked} onClick={onSelect} aria-pressed={selected} className={`group relative flex w-full items-center gap-4 px-5 py-5 text-left transition disabled:cursor-default ${selected ? "bg-primary/[.09]" : !locked ? "hover:bg-white/[.025]" : ""}`}>
-      {selected && <span className="absolute right-4 top-4 grid h-6 w-6 place-items-center rounded-full bg-primary text-primary-foreground"><Check className="h-3.5 w-3.5" /></span>}
+    <button disabled={locked} onClick={onSelect} aria-pressed={selected} className={`group relative flex h-[150px] w-full flex-col items-center gap-2 px-2 py-4 text-center transition disabled:cursor-default sm:h-auto sm:flex-row sm:gap-4 sm:px-5 sm:py-5 sm:text-left ${selected ? "bg-primary/[.09]" : !locked ? "hover:bg-white/[.025]" : ""}`}>
+      {selected && <span className="absolute right-2 top-2 grid h-5 w-5 place-items-center rounded-full bg-primary text-primary-foreground sm:right-4 sm:top-4 sm:h-6 sm:w-6"><Check className="h-3 w-3 sm:h-3.5 sm:w-3.5" /></span>}
       <TeamAvatar url={team.avatar_url} initials={initials} selected={selected} />
-      <span className="min-w-0 pr-7"><span className="block truncate text-[15px] font-bold leading-tight text-white">{team.name}</span><span className="mt-1 block truncate text-xs text-slate-500">{team.owner} · {team.record}</span><span className={`mt-2 block text-xs font-semibold ${selected ? "text-primary" : "text-slate-500"}`}>{selected ? "Your pick" : locked ? "Not selected" : "Select winner"}</span></span>
+      <span className="min-w-0 max-w-full sm:pr-7"><span className="line-clamp-2 min-h-8 text-xs font-bold leading-tight text-white sm:block sm:min-h-0 sm:truncate sm:text-[15px]">{team.name}</span><span className="mt-1 block truncate text-[10px] leading-tight text-slate-500 sm:text-xs">{team.owner} · {team.record}</span><span className={`mt-2 block text-[10px] font-semibold sm:text-xs ${selected ? "text-primary" : "text-slate-500"}`}>{selected ? "Your pick" : locked ? "Not selected" : "Select winner"}</span></span>
     </button>
     <div className="border-t border-white/7">
       <RosterSection label="Starters" players={team.starters ?? []} />
@@ -148,7 +148,7 @@ function BenchSection({ players, rosterId, open, onToggle }: { players: LivePlay
       aria-expanded={open}
       aria-controls={contentId}
       onClick={onToggle}
-      className="flex w-full items-center justify-between px-5 py-3 text-left transition hover:bg-white/[.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary disabled:cursor-default disabled:hover:bg-transparent"
+      className="flex w-full items-center justify-between px-2.5 py-3 text-left transition hover:bg-white/[.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary disabled:cursor-default disabled:hover:bg-transparent sm:px-5"
     >
       <span className="text-[11px] font-bold uppercase tracking-[.14em] text-slate-500">Bench · {players.length}</span>
       <span className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.12em] text-slate-600">
@@ -164,30 +164,30 @@ function BenchSection({ players, rosterId, open, onToggle }: { players: LivePlay
 
 function RosterSection({ label, players, muted = false }: { label: string; players: LivePlayer[]; muted?: boolean }) {
   return <div className={muted ? "bg-black/10" : ""}>
-    <div className="flex items-center justify-between border-b border-white/6 px-5 py-2.5"><h3 className="text-[11px] font-bold uppercase tracking-[.14em] text-slate-500">{label} · {players.length}</h3><span className="text-[10px] font-semibold uppercase tracking-[.12em] text-slate-600">Week pts</span></div>
+    <div className="flex items-center justify-between border-b border-white/6 px-2.5 py-2.5 sm:px-5"><h3 className="text-[9px] font-bold uppercase tracking-[.1em] text-slate-500 sm:text-[11px] sm:tracking-[.14em]">{label} · {players.length}</h3><span className="text-[8px] font-semibold uppercase tracking-[.08em] text-slate-600 sm:text-[10px] sm:tracking-[.12em]">Week pts</span></div>
     {players.length ? <div className="divide-y divide-white/5">{players.map(player => <PlayerRow key={player.player_id} player={player} muted={muted} />)}</div> : <p className="px-5 py-4 text-sm text-slate-600">No {label.toLowerCase()} returned by Sleeper.</p>}
   </div>;
 }
 
 function PlayerRow({ player, muted }: { player: LivePlayer; muted: boolean }) {
-  return <div className={`grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 px-5 py-2.5 ${muted ? "text-slate-400" : ""}`}>
+  return <div className={`grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-1.5 px-2 py-2 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:gap-3 sm:px-5 sm:py-2.5 ${muted ? "text-slate-400" : ""}`}>
     <PlayerAvatar player={player} />
-    <div className="min-w-0"><div className="flex min-w-0 items-center gap-2"><span className="shrink-0 rounded-md bg-white/5 px-1.5 py-0.5 text-[9px] font-bold text-slate-400">{player.position}</span><p className={`truncate text-sm font-semibold ${muted ? "text-slate-300" : "text-slate-100"}`}>{player.name}</p></div><p className="mt-0.5 truncate text-[11px] text-slate-600">{player.team ?? "Free agent"}{player.injury_status ? <span className="text-amber-400"> · {player.injury_status}</span> : null}</p></div>
-    <span className={`tabular-nums text-sm font-semibold ${player.points && player.points > 0 ? "text-primary" : "text-slate-500"}`}>{player.points === null ? "—" : player.points.toFixed(1)}</span>
+    <div className="min-w-0"><div className="flex min-w-0 items-center gap-1 sm:gap-2"><span className="shrink-0 rounded bg-white/5 px-1 py-0.5 text-[7px] font-bold text-slate-400 sm:rounded-md sm:px-1.5 sm:text-[9px]">{player.position}</span><p className={`truncate text-[10px] font-semibold sm:text-sm ${muted ? "text-slate-300" : "text-slate-100"}`}>{player.name}</p></div><p className="mt-0.5 truncate text-[8px] text-slate-600 sm:text-[11px]">{player.team ?? "Free agent"}{player.injury_status ? <span className="text-amber-400"> · {player.injury_status}</span> : null}</p></div>
+    <span className={`tabular-nums text-[10px] font-semibold sm:text-sm ${player.points && player.points > 0 ? "text-primary" : "text-slate-500"}`}>{player.points === null ? "—" : player.points.toFixed(1)}</span>
   </div>;
 }
 
 function TeamAvatar({ url, initials, selected }: { url?: string | null; initials: string; selected: boolean }) {
   const [failed, setFailed] = useState(false);
   const style = selected ? "border-primary bg-primary text-primary-foreground" : "border-white/10 bg-[#1b2535] text-slate-300";
-  return <span className={`grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl border text-sm font-black ${style}`}>
+  return <span className={`grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl border text-xs font-black sm:h-12 sm:w-12 sm:rounded-2xl sm:text-sm ${style}`}>
     {url && !failed ? <img src={url} alt="" loading="lazy" className="h-full w-full object-cover" onError={() => setFailed(true)} /> : initials}
   </span>;
 }
 
 function PlayerAvatar({ player, compact = false }: { player: LivePlayer; compact?: boolean }) {
   const [failed, setFailed] = useState(false);
-  return <span className={`grid shrink-0 place-items-center overflow-hidden rounded-full border border-white/8 bg-[#1b2535] font-bold text-slate-500 ${compact ? "h-7 w-7 text-[8px]" : "h-9 w-9 text-[9px]"}`}>
+  return <span className={`grid shrink-0 place-items-center overflow-hidden rounded-full border border-white/8 bg-[#1b2535] font-bold text-slate-500 ${compact ? "h-5 w-5 text-[6px] sm:h-7 sm:w-7 sm:text-[8px]" : "h-6 w-6 text-[7px] sm:h-9 sm:w-9 sm:text-[9px]"}`}>
     {player.image_url && !failed ? <img src={player.image_url} alt="" loading="lazy" className="h-full w-full object-cover" onError={() => setFailed(true)} /> : player.position}
   </span>;
 }
