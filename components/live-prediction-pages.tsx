@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, LoaderCircle, Minus, Trophy, X } from "lucide-react";
-import { apiFetch, LiveWeek } from "@/lib/api";
+import { Check, CircleDashed, Clock3, LoaderCircle, Minus, Trophy, X } from "lucide-react";
+import { apiFetch, CurrentUser, LiveWeek } from "@/lib/api";
 import { PageHeading } from "@/components/page-heading";
 
 type Standing = { user_id: string; display_name: string; wins: number; losses: number; pushes: number };
@@ -25,11 +25,23 @@ export function LiveHistory() {
 }
 
 export function LiveResults() {
-  const [data, setData] = useState<LiveWeek | null>(null); const [error, setError] = useState("");
-  useEffect(() => { apiFetch<LiveWeek>("/predictions/current").then(setData).catch(reason => setError(reason instanceof Error ? reason.message : "Could not load results.")); }, []);
-  return <><PageHeading eyebrow="Live from Sleeper" title="Matchup results">Scores for the active BTB week. Prediction outcomes become final after commissioner finalization.</PageHeading>{error ? <Message title="Results unavailable" detail={error} /> : !data ? <Loading /> : <><div className="mb-5 flex items-center gap-3 rounded-2xl border border-white/8 bg-card p-5"><Trophy className="h-5 w-5 text-primary" /><span><strong>Week {data.week.number}</strong> · <span className="capitalize text-slate-400">{data.week.status}</span></span></div><div className="grid gap-3">{data.matchups.map(m => { const tied = m.team_a.score !== null && m.team_a.score === m.team_b.score; const aWon = m.winner_roster_id === m.team_a.roster_id; return <div key={m.id} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-3 rounded-2xl border border-white/8 bg-card p-4 sm:gap-6 sm:px-6"><TeamResult team={m.team_a} winner={aWon} /><span className="text-xs font-bold text-slate-600">VS</span><TeamResult team={m.team_b} winner={m.winner_roster_id === m.team_b.roster_id} right /><span className={`grid h-9 w-9 place-items-center rounded-full ${tied ? "bg-blue-400/10 text-blue-400" : m.winner_roster_id ? "bg-emerald-400/10 text-emerald-400" : "bg-white/5 text-slate-500"}`}>{tied ? <Minus className="h-4" /> : m.winner_roster_id ? <Check className="h-4" /> : <X className="h-4" />}</span></div>; })}</div></>}</>;
+  const [data, setData] = useState<LiveWeek | null>(null); const [user, setUser] = useState<CurrentUser | null>(null); const [error, setError] = useState("");
+  useEffect(() => { Promise.all([apiFetch<LiveWeek>("/predictions/current"), apiFetch<CurrentUser>("/auth/me")]).then(([week, currentUser]) => { setData(week); setUser(currentUser); }).catch(reason => setError(reason instanceof Error ? reason.message : "Could not load results.")); }, []);
+  return <><PageHeading eyebrow="Live from Sleeper" title="Matchup results">Scores for the active BTB week. Prediction outcomes become final after commissioner finalization.</PageHeading>{error ? <Message title="Results unavailable" detail={error} /> : !data || !user ? <Loading /> : <><div className="mb-5 flex items-center gap-3 rounded-2xl border border-white/8 bg-card p-5"><Trophy className="h-5 w-5 text-primary" /><span><strong>Week {data.week.number}</strong> · <span className="capitalize text-slate-400">{data.week.status}</span></span></div><div className="grid gap-3">{data.matchups.map(m => { const pick = data.picks.find(item => item.user_id === user.id && item.matchup_id === m.id); const pickedRosterId = pick?.selected_roster_id ?? null; const aWon = m.winner_roster_id === m.team_a.roster_id; return <div key={m.id} className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_36px] items-center gap-3 rounded-2xl border border-white/8 bg-card p-4 sm:gap-6 sm:px-6"><TeamResult team={m.team_a} winner={aWon} picked={pickedRosterId === m.team_a.roster_id} /><span className="text-xs font-bold text-slate-600">VS</span><TeamResult team={m.team_b} winner={m.winner_roster_id === m.team_b.roster_id} picked={pickedRosterId === m.team_b.roster_id} right /><PickResultIcon result={pick?.result ?? null} picked={pickedRosterId !== null} finalized={data.week.status === "final"} /></div>; })}</div></>}</>;
 }
 
-function TeamResult({ team, winner, right }: { team: LiveWeek["matchups"][number]["team_a"]; winner: boolean; right?: boolean }) { return <div className={right ? "text-right sm:text-left" : ""}><p className={`font-bold ${winner ? "text-primary" : ""}`}>{team.name}</p><p className="text-xs text-slate-500">{team.score ?? "Not scored"}</p></div>; }
+function TeamResult({ team, winner, picked, right }: { team: LiveWeek["matchups"][number]["team_a"]; winner: boolean; picked: boolean; right?: boolean }) { return <div className={right ? "text-right sm:text-left" : ""}><div className={`flex flex-wrap items-center gap-2 ${right ? "justify-end sm:justify-start" : ""}`}><p className={`font-bold ${winner ? "text-primary" : ""}`}>{team.name}</p>{picked && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[.08em] text-primary">Your pick</span>}</div><p className={`mt-1 text-2xl font-black tabular-nums ${winner ? "text-primary" : "text-slate-200"}`}>{team.score === null ? "—" : team.score.toFixed(2)}</p></div>; }
+function PickResultIcon({ result, picked, finalized }: { result: "win" | "loss" | "push" | null; picked: boolean; finalized: boolean }) {
+  const state = !picked
+    ? { label: finalized ? "No pick submitted" : "No pick yet", style: finalized ? "bg-red-400/10 text-red-400" : "bg-white/5 text-slate-500", icon: finalized ? <X className="h-4 w-4" /> : <CircleDashed className="h-4 w-4" /> }
+    : result === "win"
+      ? { label: "Correct pick", style: "bg-emerald-400/10 text-emerald-400", icon: <Check className="h-4 w-4" /> }
+      : result === "loss"
+        ? { label: "Incorrect pick", style: "bg-red-400/10 text-red-400", icon: <X className="h-4 w-4" /> }
+        : result === "push"
+          ? { label: "Push", style: "bg-blue-400/10 text-blue-400", icon: <Minus className="h-4 w-4" /> }
+          : { label: "Awaiting final result", style: "bg-white/5 text-slate-500", icon: <Clock3 className="h-4 w-4" /> };
+  return <span title={state.label} aria-label={state.label} className={`grid h-9 w-9 place-items-center rounded-full ${state.style}`}>{state.icon}</span>;
+}
 function Loading() { return <div className="grid min-h-52 place-items-center rounded-2xl border border-white/8 bg-card"><LoaderCircle className="h-6 w-6 animate-spin text-primary" /></div>; }
 function Message({ title, detail }: { title: string; detail: string }) { return <div className="rounded-2xl border border-white/8 bg-card p-8 text-center"><h2 className="text-xl font-bold">{title}</h2><p className="mt-2 text-sm text-slate-400">{detail}</p></div>; }

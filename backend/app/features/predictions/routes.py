@@ -27,7 +27,7 @@ class PickCard(BaseModel):
 
 def _default_lock_at(now: datetime | None = None) -> datetime:
     now = now.astimezone(CENTRAL_TIME) if now else datetime.now(CENTRAL_TIME)
-    days = (4 - now.weekday()) % 7
+    days = (3 - now.weekday()) % 7
     candidate = datetime.combine((now + timedelta(days=days)).date(), time(19, 0), tzinfo=now.tzinfo)
     if candidate <= now:
         candidate += timedelta(days=7)
@@ -38,12 +38,12 @@ def _utc(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
-def _migrate_thursday_lock_to_friday(week: PredictionWeek) -> bool:
+def _migrate_friday_lock_to_thursday(week: PredictionWeek) -> bool:
     local_lock = _utc(week.lock_at).astimezone(CENTRAL_TIME)
-    if week.status is not WeekStatus.open or local_lock.weekday() != 3:
+    if week.status is not WeekStatus.open or local_lock.weekday() != 4:
         return False
-    friday = datetime.combine(local_lock.date() + timedelta(days=1), time(19, 0), tzinfo=CENTRAL_TIME)
-    week.lock_at = friday.astimezone(timezone.utc)
+    thursday = datetime.combine(local_lock.date() - timedelta(days=1), time(19, 0), tzinfo=CENTRAL_TIME)
+    week.lock_at = thursday.astimezone(timezone.utc)
     return True
 
 
@@ -59,7 +59,7 @@ async def _sync_current(db: AsyncSession, include_rosters: bool = False) -> tupl
         db.add(week)
         await db.flush()
     else:
-        _migrate_thursday_lock_to_friday(week)
+        _migrate_friday_lock_to_thursday(week)
     incoming = await sleeper.weekly_matchups(season.sleeper_league_id, week_number, include_players=include_rosters)
     if week.status is not WeekStatus.final:
         existing = {m.sleeper_matchup_id: m for m in (await db.scalars(select(PredictionMatchup).where(PredictionMatchup.week_id == week.id))).all()}

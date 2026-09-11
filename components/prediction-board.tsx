@@ -93,15 +93,34 @@ type Matchup = LiveWeek["matchups"][number];
 
 function MatchupCard({ matchup, locked, selectedRosterId, onSelect }: { matchup: Matchup; locked: boolean; selectedRosterId?: number; onSelect: (rosterId: number) => void }) {
   const [benchOpen, setBenchOpen] = useState(false);
+  const [scoreOpen, setScoreOpen] = useState(false);
+  const scoreBreakdownAvailable = Boolean(matchup.team_a.starters?.length || matchup.team_b.starters?.length);
 
   return <article className="overflow-hidden rounded-2xl border border-white/9 bg-card">
-    <div className="flex items-center justify-between border-b border-white/7 px-5 py-3 text-xs font-medium text-slate-500"><span>SLEEPER MATCHUP {matchup.sleeper_matchup_id}</span><span>{matchup.team_a.score ?? "—"} – {matchup.team_b.score ?? "—"}</span></div>
+    <div className="flex items-center justify-between border-b border-white/7 px-5 py-3 text-xs font-medium text-slate-500"><span>SLEEPER MATCHUP {matchup.sleeper_matchup_id}</span><button type="button" disabled={!scoreBreakdownAvailable} aria-expanded={scoreOpen} onClick={() => setScoreOpen(current => !current)} className="flex items-center gap-1.5 rounded-md text-slate-400 underline decoration-white/20 decoration-dashed underline-offset-4 transition hover:text-white disabled:no-underline disabled:hover:text-slate-400" title={scoreBreakdownAvailable ? "Show player point breakdown" : "Player point breakdown unavailable"}><span>{matchup.team_a.score ?? "—"} – {matchup.team_b.score ?? "—"}</span>{scoreBreakdownAvailable && <ChevronDown className={`h-3.5 w-3.5 transition-transform ${scoreOpen ? "rotate-180" : ""}`} />}</button></div>
+    {scoreOpen && <ScoreBreakdown matchup={matchup} />}
     <div className="grid lg:grid-cols-[minmax(0,1fr)_48px_minmax(0,1fr)]">
       <TeamPanel team={matchup.team_a} locked={locked} selected={selectedRosterId === matchup.team_a.roster_id} onSelect={() => onSelect(matchup.team_a.roster_id)} benchOpen={benchOpen} onToggleBench={() => setBenchOpen(current => !current)} />
       <div className="flex items-center justify-center border-y border-white/7 py-2 text-[11px] font-bold text-slate-600 lg:border-x lg:border-y-0 lg:py-0">VS</div>
       <TeamPanel team={matchup.team_b} locked={locked} selected={selectedRosterId === matchup.team_b.roster_id} onSelect={() => onSelect(matchup.team_b.roster_id)} benchOpen={benchOpen} onToggleBench={() => setBenchOpen(current => !current)} />
     </div>
   </article>;
+}
+
+function ScoreBreakdown({ matchup }: { matchup: Matchup }) {
+  return <section className="grid divide-y divide-white/7 border-b border-white/7 bg-black/10 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+    <TeamScoreBreakdown team={matchup.team_a} />
+    <TeamScoreBreakdown team={matchup.team_b} />
+  </section>;
+}
+
+function TeamScoreBreakdown({ team }: { team: LiveTeam }) {
+  const starters = team.starters ?? [];
+  return <div className="min-w-0 px-5 py-4">
+    <div className="mb-3 flex items-center justify-between gap-3"><h3 className="truncate text-sm font-bold text-slate-200">{team.name}</h3><span className="text-lg font-black tabular-nums text-primary">{team.score === null ? "—" : team.score.toFixed(2)}</span></div>
+    <div className="divide-y divide-white/5 rounded-xl border border-white/7 bg-white/[.02]">{starters.map(player => <div key={player.player_id} className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-2.5 px-3 py-2"><PlayerAvatar player={player} compact /><div className="min-w-0"><p className="truncate text-xs font-semibold text-slate-300">{player.name}</p><p className="text-[10px] text-slate-600">{player.position} · {player.team ?? "FA"}</p></div><span className="text-xs font-bold tabular-nums text-slate-300">{player.points === null ? "—" : player.points.toFixed(2)}</span></div>)}</div>
+    {!starters.some(player => player.points !== null) && <p className="mt-2 text-[11px] text-slate-600">Sleeper has not posted player point totals yet.</p>}
+  </div>;
 }
 
 function TeamPanel({ team, locked, selected, onSelect, benchOpen, onToggleBench }: { team: LiveTeam; locked: boolean; selected: boolean; onSelect: () => void; benchOpen: boolean; onToggleBench: () => void }) {
@@ -166,9 +185,9 @@ function TeamAvatar({ url, initials, selected }: { url?: string | null; initials
   </span>;
 }
 
-function PlayerAvatar({ player }: { player: LivePlayer }) {
+function PlayerAvatar({ player, compact = false }: { player: LivePlayer; compact?: boolean }) {
   const [failed, setFailed] = useState(false);
-  return <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border border-white/8 bg-[#1b2535] text-[9px] font-bold text-slate-500">
+  return <span className={`grid shrink-0 place-items-center overflow-hidden rounded-full border border-white/8 bg-[#1b2535] font-bold text-slate-500 ${compact ? "h-7 w-7 text-[8px]" : "h-9 w-9 text-[9px]"}`}>
     {player.image_url && !failed ? <img src={player.image_url} alt="" loading="lazy" className="h-full w-full object-cover" onError={() => setFailed(true)} /> : player.position}
   </span>;
 }
