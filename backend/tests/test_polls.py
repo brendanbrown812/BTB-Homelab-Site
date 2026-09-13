@@ -9,7 +9,7 @@ from app.database.base import Base
 from app.features.polls.models import PollSelectionMode
 from app.features.polls.models import Poll, PollOption
 from app.features.polls.notifications import send_poll_created_notification
-from app.features.polls.routes import PollCreate, VoteUpdate, close_poll, create_poll, update_and_reopen_poll, update_vote
+from app.features.polls.routes import PollCreate, VoteUpdate, close_poll, create_poll, delete_poll, update_and_reopen_poll, update_vote
 from app.models.user import User, UserRole
 
 
@@ -64,6 +64,19 @@ class PollTests(unittest.IsolatedAsyncioTestCase):
             poll = await create_poll(PollCreate(question="Quiet poll", selection_mode=PollSelectionMode.single, options=["A", "B"], bypass_notification=True), admin=admin, db=db)
 
             self.assertEqual(poll["notification_status"], "bypassed")
+
+    async def test_admin_can_delete_poll_and_its_votes(self):
+        async with self.sessions() as db:
+            admin = User(username="admin", display_name="Commissioner", role=UserRole.admin, is_active=True)
+            member = User(username="member", display_name="League Member", role=UserRole.user, is_active=True)
+            db.add_all([admin, member])
+            await db.commit()
+            poll = await create_poll(PollCreate(question="Temporary poll", selection_mode=PollSelectionMode.single, options=["A", "B"], bypass_notification=True), admin=admin, db=db)
+            await update_vote(poll["id"], VoteUpdate(option_ids=[poll["options"][0]["id"]]), user=member, db=db)
+
+            await delete_poll(poll["id"], _=admin, db=db)
+
+            self.assertIsNone(await db.get(Poll, poll["id"]))
 
     async def test_user_can_replace_an_existing_vote(self):
         async with self.sessions() as db:

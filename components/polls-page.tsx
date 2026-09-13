@@ -23,6 +23,8 @@ export function PollsPage() {
   const [warning, setWarning] = useState("");
   const [closeTarget, setCloseTarget] = useState<Poll | null>(null);
   const [closing, setClosing] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Poll | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
@@ -48,6 +50,20 @@ export function PollsPage() {
     }
   }
 
+  async function deletePoll() {
+    if (!deleteTarget) return;
+    setDeleting(true); setError("");
+    try {
+      await apiFetch<void>(`/polls/${deleteTarget.id}`, { method: "DELETE" });
+      setData(current => current ? { ...current, polls: current.polls.filter(poll => poll.id !== deleteTarget.id) } : current);
+      setDeleteTarget(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not delete the poll.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const visiblePolls = data?.polls.filter(poll => showCompleted || poll.is_open) ?? [];
 
   return <>
@@ -58,12 +74,13 @@ export function PollsPage() {
     {notice && <p role="status" className="mb-5 rounded-xl bg-emerald-400/10 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
     {warning && <p role="status" className="mb-5 rounded-xl bg-amber-400/10 px-4 py-3 text-sm text-amber-300">{warning}</p>}
     {error && <p role="alert" className="mb-5 rounded-xl bg-red-400/10 px-4 py-3 text-sm text-red-300">{error}</p>}
-    {!data ? <Loading /> : visiblePolls.length === 0 ? <EmptyState admin={data.is_admin} hasCompleted={data.polls.some(poll => !poll.is_open)} /> : <div className="space-y-5">{visiblePolls.map(poll => <PollCard key={poll.id} poll={poll} isAdmin={data.is_admin} onChanged={replacePoll} onClose={() => setCloseTarget(poll)} />)}</div>}
+    {!data ? <Loading /> : visiblePolls.length === 0 ? <EmptyState admin={data.is_admin} hasCompleted={data.polls.some(poll => !poll.is_open)} /> : <div className="space-y-5">{visiblePolls.map(poll => <PollCard key={poll.id} poll={poll} isAdmin={data.is_admin} onChanged={replacePoll} onClose={() => setCloseTarget(poll)} onDelete={() => setDeleteTarget(poll)} />)}</div>}
     <AlertDialog open={!!closeTarget} onOpenChange={open => { if (!open && !closing) setCloseTarget(null); }}><AlertDialogContent className="border-white/10 bg-card"><AlertDialogHeader><AlertDialogTitle>Close this poll?</AlertDialogTitle><AlertDialogDescription>Voting will stop immediately. Everyone will still be able to see the final named results.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={closing}>Cancel</AlertDialogCancel><AlertDialogAction disabled={closing} onClick={event => { event.preventDefault(); void closePoll(); }}>{closing ? "Closing…" : "Close poll"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+    <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open && !deleting) setDeleteTarget(null); }}><AlertDialogContent className="border-white/10 bg-card"><AlertDialogHeader><AlertDialogTitle>Delete this poll?</AlertDialogTitle><AlertDialogDescription>This permanently removes “{deleteTarget?.question},” including every vote and answer option. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel><AlertDialogAction variant="destructive" disabled={deleting} onClick={event => { event.preventDefault(); void deletePoll(); }}>{deleting ? "Deleting…" : "Delete poll"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </>;
 }
 
-function PollCard({ poll, isAdmin, onChanged, onClose }: { poll: Poll; isAdmin: boolean; onChanged: (poll: Poll) => void; onClose: () => void }) {
+function PollCard({ poll, isAdmin, onChanged, onClose, onDelete }: { poll: Poll; isAdmin: boolean; onChanged: (poll: Poll) => void; onClose: () => void; onDelete: () => void }) {
   const [selected, setSelected] = useState<string[]>(poll.current_user_option_ids);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -88,7 +105,7 @@ function PollCard({ poll, isAdmin, onChanged, onClose }: { poll: Poll; isAdmin: 
     <header className="border-b border-white/8 p-5 sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0"><div className="mb-2 flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${poll.is_open ? "bg-emerald-400/10 text-emerald-300" : "bg-white/5 text-slate-400"}`}>{poll.is_open ? "Open" : "Closed"}</span><span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">{poll.selection_mode === "single" ? "Select one" : "Select all that apply"}</span></div><h2 className="text-xl font-black tracking-tight sm:text-2xl">{poll.question}</h2>{poll.description && <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-400">{poll.description}</p>}<p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500"><span>Created by {poll.created_by.display_name}</span><span className="flex items-center gap-1.5"><CalendarClock className="h-3.5 w-3.5" />{poll.is_open ? poll.closes_at ? `Closes ${formatDate(poll.closes_at)}` : "No closing date" : `Closed ${formatDate(poll.closed_at ?? poll.closes_at)}`}</span></p></div>
-        {isAdmin && (poll.is_open ? <Button variant="outline" size="sm" onClick={onClose}><LockKeyhole className="h-4 w-4" />Close poll</Button> : <PollFormDialog poll={poll} onSaved={onChanged} />)}
+        {isAdmin && <div className="flex flex-wrap gap-2">{poll.is_open ? <Button variant="outline" size="sm" onClick={onClose}><LockKeyhole className="h-4 w-4" />Close poll</Button> : <PollFormDialog poll={poll} onSaved={onChanged} />}<Button variant="outline" size="sm" className="text-slate-400 hover:border-red-400/40 hover:text-red-300" onClick={onDelete}><Trash2 className="h-4 w-4" />Delete</Button></div>}
       </div>
     </header>
     <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,.8fr)]">

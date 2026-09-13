@@ -191,3 +191,14 @@ async def close_poll(poll_id: uuid.UUID, admin: User = Depends(admin_user), db: 
         poll.closed_at = _utc_now()
         await db.commit()
     return await _poll_payload(poll, admin, db)
+
+
+@router.delete("/{poll_id}", status_code=204)
+async def delete_poll(poll_id: uuid.UUID, _: User = Depends(admin_user), db: AsyncSession = Depends(get_db)):
+    poll = await db.get(Poll, poll_id)
+    if not poll:
+        raise HTTPException(status_code=404, detail="Poll not found")
+    await db.execute(delete(PollVote).where(PollVote.poll_id == poll.id))
+    await db.execute(delete(PollOption).where(PollOption.poll_id == poll.id))
+    await db.delete(poll)
+    await db.commit()
