@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import admin_user, current_user
 from app.database.session import get_db
 from app.features.polls.models import Poll, PollOption, PollSelectionMode, PollVote
+from app.features.polls.notifications import send_poll_created_notification
 from app.models.user import User, UserRole
 
 router = APIRouter(prefix="/polls", tags=["polls"])
@@ -20,6 +21,7 @@ class PollCreate(BaseModel):
     selection_mode: PollSelectionMode
     options: list[str] = Field(min_length=2)
     closes_at: datetime | None = None
+    bypass_notification: bool = False
 
 
 class VoteUpdate(BaseModel):
@@ -118,7 +120,10 @@ async def create_poll(body: PollCreate, admin: User = Depends(admin_user), db: A
     db.add_all([PollOption(poll_id=poll.id, text=option, position=index) for index, option in enumerate(options)])
     await db.commit()
     await db.refresh(poll)
-    return await _poll_payload(poll, admin, db)
+    created_options = (await db.scalars(select(PollOption).where(PollOption.poll_id == poll.id).order_by(PollOption.position))).all()
+    payload = await _poll_payload(poll, admin, db)
+    payload["notification_status"] = "bypassed" if body.bypass_notification else await send_poll_created_notification(poll, list(created_options))
+    return payload
 
 
 @router.put("/{poll_id}")

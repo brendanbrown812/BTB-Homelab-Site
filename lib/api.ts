@@ -47,6 +47,7 @@ export type Poll = {
   options: PollOption[];
   current_user_option_ids: string[];
   not_voted: Array<{ id: string; display_name: string }>;
+  notification_status?: "sent" | "not_configured" | "failed" | "bypassed";
 };
 export type PollList = { is_admin: boolean; polls: Poll[] };
 

@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     bootstrap_admin_display_name: str = "Bootstrap Admin"
     bootstrap_admin_password: str = ""
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
+    public_site_url: str = "http://localhost:3000"
+    discord_poll_webhook_url: str = ""
+    discord_poll_role_id: str = ""
 
     model_config = SettingsConfigDict(env_file=(".env", "../.env"), extra="ignore")
 
