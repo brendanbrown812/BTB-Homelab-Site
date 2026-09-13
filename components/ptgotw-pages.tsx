@@ -6,6 +6,7 @@ import { ArrowLeft, BookOpenText, CalendarDays, LoaderCircle, Pencil, Trash2, Us
 import { useEffect, useState } from "react";
 
 import { PageHeading } from "@/components/page-heading";
+import { PTGOTWComments } from "@/components/ptgotw-comments";
 import { PTGOTWWorkMode } from "@/components/ptgotw-work-mode";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -70,6 +71,7 @@ export function PTGWriteupDetail() {
     <div className="mb-7 flex items-center justify-between gap-4"><Link href="/ptgotw" className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"><ArrowLeft className="h-4 w-4" />All writeups</Link><label className="flex items-center gap-2 text-sm font-medium text-slate-300"><span>Work mode</span><Switch checked={workMode} onCheckedChange={setWorkMode} aria-label="Toggle work mode" /></label></div>
     <header className="mb-8 border-b border-white/8 pb-8"><p className="mb-3 text-xs font-semibold uppercase tracking-[.18em] text-primary">{writeup.year} · Prime Time Game of the Week</p><h1 className="text-4xl font-black tracking-[-.04em] sm:text-5xl">Week {writeup.week}</h1><div className="mt-4 flex flex-wrap items-center gap-3"><p className="flex items-center gap-2 text-sm text-slate-400"><UserRound className="h-4 w-4 text-primary" />Written by <strong className="text-slate-200">{writeup.author.display_name}</strong></p>{writeup.submitted_by_author !== undefined && <span className="rounded-full border border-white/8 bg-white/[.035] px-2.5 py-1 text-xs text-slate-400">{writeup.submitted_by_author ? "Submitted by author" : "Submitted by commissioner"}</span>}</div></header>
     <div className="rounded-2xl border border-white/8 bg-card p-6 sm:p-9"><div className="text-base leading-8 text-slate-200 [&_b]:font-bold [&_div]:mb-5 [&_em]:italic [&_i]:italic [&_li]:mb-2 [&_ol]:mb-5 [&_ol]:list-decimal [&_ol]:pl-7 [&_p]:mb-5 [&_strong]:font-bold [&_u]:underline [&_ul]:mb-5 [&_ul]:list-disc [&_ul]:pl-7" dangerouslySetInnerHTML={{ __html: writeup.content_html }} /></div>
+    {writeup.is_published !== false && <PTGOTWComments writeupId={writeup.id} />}
   </article>;
 }
 

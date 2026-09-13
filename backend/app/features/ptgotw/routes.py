@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from html import escape
 from html.parser import HTMLParser
 
@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import admin_user, current_user
 from app.database.session import get_db
-from app.features.ptgotw.models import PTGWriteup
+from app.features.ptgotw.models import PTGWriteup, PTGWriteupComment
 from app.models.user import User, UserRole
 
 router = APIRouter(prefix="/ptgotw", tags=["PTGOTW"])
@@ -60,6 +60,15 @@ class WriteupUpdate(BaseModel):
     is_published: bool | None = None
 
 
+class CommentCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=5000)
+    parent_id: uuid.UUID | None = None
+
+
+class CommentUpdate(BaseModel):
+    content: str = Field(min_length=1, max_length=5000)
+
+
 def _clean_content(value: str) -> str:
     sanitizer = _WriteupSanitizer()
     sanitizer.feed(value.strip())
@@ -70,6 +79,48 @@ def _clean_content(value: str) -> str:
     if not plain_text.strip():
         return ""
     return "".join(sanitizer.output).strip()
+
+
+def _clean_comment(value: str) -> str:
+    content = value.strip()
+    if not content:
+        raise HTTPException(status_code=422, detail="Comment cannot be blank")
+    return content
+
+
+async def _published_writeup(db: AsyncSession, writeup_id: uuid.UUID) -> PTGWriteup:
+    writeup = await db.get(PTGWriteup, writeup_id)
+    if not writeup or not writeup.is_published:
+        raise HTTPException(status_code=404, detail="Published writeup not found")
+    return writeup
+
+
+async def _comments_payload(db: AsyncSession, writeup_id: uuid.UUID, viewer: User) -> dict:
+    rows = (
+        await db.execute(
+            select(PTGWriteupComment, User.display_name, User.role)
+            .join(User, User.id == PTGWriteupComment.user_id)
+            .where(PTGWriteupComment.writeup_id == writeup_id)
+            .order_by(PTGWriteupComment.created_at, PTGWriteupComment.id)
+        )
+    ).all()
+    comments = []
+    for comment, display_name, role in rows:
+        deleted = comment.is_deleted
+        comments.append({
+            "id": comment.id,
+            "parent_id": comment.parent_id,
+            "content": None if deleted else comment.content,
+            "is_deleted": deleted,
+            "author": None if deleted else {
+                "id": comment.user_id,
+                "display_name": display_name,
+                "is_admin": role is UserRole.admin,
+            },
+            "created_at": comment.created_at,
+            "edited_at": comment.edited_at,
+        })
+    return {"current_user_id": viewer.id, "is_admin": viewer.role is UserRole.admin, "comments": comments}
 
 
 async def _validate_author(db: AsyncSession, author_id: uuid.UUID) -> str:
@@ -167,6 +218,53 @@ async def create_writeup(body: WriteupCreate, admin: User = Depends(admin_user),
         raise HTTPException(status_code=409, detail=f"A Week {body.week} writeup already exists for {body.year}") from None
     await db.refresh(writeup)
     return _payload(writeup, author_name, admin)
+
+
+@router.get("/{writeup_id}/comments")
+async def list_comments(writeup_id: uuid.UUID, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    await _published_writeup(db, writeup_id)
+    return await _comments_payload(db, writeup_id, user)
+
+
+@router.post("/{writeup_id}/comments", status_code=201)
+async def create_comment(writeup_id: uuid.UUID, body: CommentCreate, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    await _published_writeup(db, writeup_id)
+    if body.parent_id is not None:
+        parent = await db.get(PTGWriteupComment, body.parent_id)
+        if not parent or parent.writeup_id != writeup_id:
+            raise HTTPException(status_code=400, detail="Reply target is not part of this writeup")
+    db.add(PTGWriteupComment(writeup_id=writeup_id, user_id=user.id, parent_id=body.parent_id, content=_clean_comment(body.content)))
+    await db.commit()
+    return await _comments_payload(db, writeup_id, user)
+
+
+@router.put("/{writeup_id}/comments/{comment_id}")
+async def update_comment(writeup_id: uuid.UUID, comment_id: uuid.UUID, body: CommentUpdate, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    await _published_writeup(db, writeup_id)
+    comment = await db.get(PTGWriteupComment, comment_id)
+    if not comment or comment.writeup_id != writeup_id:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if comment.is_deleted:
+        raise HTTPException(status_code=409, detail="Deleted comments cannot be edited")
+    if comment.user_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only edit your own comments")
+    comment.content = _clean_comment(body.content)
+    comment.edited_at = datetime.now(timezone.utc)
+    await db.commit()
+    return await _comments_payload(db, writeup_id, user)
+
+
+@router.delete("/{writeup_id}/comments/{comment_id}")
+async def delete_comment(writeup_id: uuid.UUID, comment_id: uuid.UUID, admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)):
+    await _published_writeup(db, writeup_id)
+    comment = await db.get(PTGWriteupComment, comment_id)
+    if not comment or comment.writeup_id != writeup_id:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if not comment.is_deleted:
+        comment.content = ""
+        comment.is_deleted = True
+        await db.commit()
+    return await _comments_payload(db, writeup_id, admin)
 
 
 @router.delete("/{writeup_id}", status_code=204)

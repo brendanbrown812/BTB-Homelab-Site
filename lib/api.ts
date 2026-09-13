@@ -33,6 +33,16 @@ export type PTGWriteupList = {
   available_years: number[];
   writeups: Array<Omit<PTGWriteup, "content_html">>;
 };
+export type PTGComment = {
+  id: string;
+  parent_id: string | null;
+  content: string | null;
+  is_deleted: boolean;
+  author: { id: string; display_name: string; is_admin: boolean } | null;
+  created_at: string;
+  edited_at: string | null;
+};
+export type PTGCommentThread = { current_user_id: string; is_admin: boolean; comments: PTGComment[] };
 export type PollOption = { id: string; text: string; position: number; voters: Array<{ id: string; display_name: string }> };
 export type Poll = {
   id: string;

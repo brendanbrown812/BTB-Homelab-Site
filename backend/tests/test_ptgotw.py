@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.database.base import Base
 from app.features.ptgotw.models import PTGWriteup
-from app.features.ptgotw.routes import WriteupCreate, WriteupUpdate, _clean_content, create_writeup, delete_writeup, list_writeups, update_writeup
+from app.features.ptgotw.routes import CommentCreate, CommentUpdate, WriteupCreate, WriteupUpdate, _clean_content, create_comment, create_writeup, delete_comment, delete_writeup, list_comments, list_writeups, update_comment, update_writeup
 from app.models.user import User, UserRole
 
 
@@ -70,6 +70,59 @@ class PTGOTWTests(unittest.IsolatedAsyncioTestCase):
             created = await create_writeup(WriteupCreate(year=2026, week=5, author_id=author.id, submitted_by_author=True), admin=admin, db=db)
             await delete_writeup(created["id"], _=admin, db=db)
             self.assertIsNone(await db.get(PTGWriteup, created["id"]))
+
+    async def test_threaded_comments_show_admin_badge_and_support_owner_edits(self):
+        async with self.sessions() as db:
+            admin = User(username="admin", display_name="Commissioner", role=UserRole.admin, is_active=True)
+            author = User(username="writer", display_name="Writer", role=UserRole.user, is_active=True)
+            commenter = User(username="reader", display_name="Reader", role=UserRole.user, is_active=True)
+            db.add_all([admin, author, commenter]); await db.commit()
+            writeup = await create_writeup(WriteupCreate(year=2026, week=6, author_id=author.id, content_html="<p>Published</p>", is_published=True), admin=admin, db=db)
+
+            admin_thread = await create_comment(writeup["id"], CommentCreate(content="Official note"), user=admin, db=db)
+            parent_id = admin_thread["comments"][0]["id"]
+            await create_comment(writeup["id"], CommentCreate(content="Good point", parent_id=parent_id), user=commenter, db=db)
+            updated = await update_comment(writeup["id"], (await list_comments(writeup["id"], user=commenter, db=db))["comments"][1]["id"], CommentUpdate(content="Really good point"), user=commenter, db=db)
+
+            self.assertTrue(updated["comments"][0]["author"]["is_admin"])
+            self.assertEqual(updated["comments"][1]["parent_id"], parent_id)
+            self.assertEqual(updated["comments"][1]["content"], "Really good point")
+            self.assertIsNotNone(updated["comments"][1]["edited_at"])
+
+    async def test_admin_deletion_keeps_replies_as_a_tombstone(self):
+        async with self.sessions() as db:
+            admin = User(username="admin", display_name="Admin", role=UserRole.admin, is_active=True)
+            author = User(username="writer", display_name="Writer", role=UserRole.user, is_active=True)
+            commenter = User(username="reader", display_name="Reader", role=UserRole.user, is_active=True)
+            db.add_all([admin, author, commenter]); await db.commit()
+            writeup = await create_writeup(WriteupCreate(year=2026, week=7, author_id=author.id, content_html="Published", is_published=True), admin=admin, db=db)
+            thread = await create_comment(writeup["id"], CommentCreate(content="Parent"), user=commenter, db=db)
+            parent_id = thread["comments"][0]["id"]
+            await create_comment(writeup["id"], CommentCreate(content="Reply", parent_id=parent_id), user=author, db=db)
+
+            deleted = await delete_comment(writeup["id"], parent_id, admin=admin, db=db)
+            deleted_parent = next(comment for comment in deleted["comments"] if comment["id"] == parent_id)
+            reply = next(comment for comment in deleted["comments"] if comment["id"] != parent_id)
+            self.assertEqual(len(deleted["comments"]), 2)
+            self.assertTrue(deleted_parent["is_deleted"])
+            self.assertIsNone(deleted_parent["content"])
+            self.assertIsNone(deleted_parent["author"])
+            self.assertEqual(reply["parent_id"], parent_id)
+
+    async def test_comments_are_hidden_on_drafts_and_return_after_republishing(self):
+        async with self.sessions() as db:
+            admin = User(username="admin", display_name="Admin", role=UserRole.admin, is_active=True)
+            author = User(username="writer", display_name="Writer", role=UserRole.user, is_active=True)
+            db.add_all([admin, author]); await db.commit()
+            writeup = await create_writeup(WriteupCreate(year=2026, week=8, author_id=author.id, content_html="Published", is_published=True), admin=admin, db=db)
+            await create_comment(writeup["id"], CommentCreate(content="Keep me"), user=author, db=db)
+            await update_writeup(writeup["id"], WriteupUpdate(content_html="Draft", is_published=False), user=admin, db=db)
+            with self.assertRaises(HTTPException) as error:
+                await list_comments(writeup["id"], user=admin, db=db)
+            self.assertEqual(error.exception.status_code, 404)
+            await update_writeup(writeup["id"], WriteupUpdate(content_html="Published again", is_published=True), user=admin, db=db)
+            restored = await list_comments(writeup["id"], user=author, db=db)
+            self.assertEqual(restored["comments"][0]["content"], "Keep me")
 
     def test_writeup_character_limit_is_thirty_thousand(self):
         self.assertEqual(_clean_content("x" * 30000), "x" * 30000)
