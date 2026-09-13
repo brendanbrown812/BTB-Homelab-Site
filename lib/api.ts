@@ -33,6 +33,22 @@ export type PTGWriteupList = {
   available_years: number[];
   writeups: Array<Omit<PTGWriteup, "content_html">>;
 };
+export type PollOption = { id: string; text: string; position: number; voters: Array<{ id: string; display_name: string }> };
+export type Poll = {
+  id: string;
+  question: string;
+  description: string | null;
+  selection_mode: "single" | "multiple";
+  closes_at: string | null;
+  closed_at: string | null;
+  created_at: string;
+  created_by: { id: string; display_name: string };
+  is_open: boolean;
+  options: PollOption[];
+  current_user_option_ids: string[];
+  not_voted: Array<{ id: string; display_name: string }>;
+};
+export type PollList = { is_admin: boolean; polls: Poll[] };
 
 export function getToken() { return typeof window === "undefined" ? null : localStorage.getItem("btb_access_token"); }
 
@@ -44,7 +60,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     throw new Error("AUTH_REQUIRED");
   }
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
+    const body = await response.json().catch(() => ({})) as { detail?: string };
     throw new Error(body.detail ?? `Request failed (${response.status})`);
   }
   if (response.status === 204) return undefined as T;

@@ -26,6 +26,10 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(min_length=12, max_length=128)
 
 
+class UpdateProfileRequest(BaseModel):
+    display_name: str = Field(min_length=1, max_length=120)
+
+
 @router.post("/login")
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     username = body.username.strip().lower()
@@ -53,6 +57,20 @@ async def setup_account(body: SetupRequest, db: AsyncSession = Depends(get_db)):
 
 @router.get("/me")
 async def me(user: User = Depends(current_user)):
+    return {"id": user.id, "username": user.username, "display_name": user.display_name, "role": user.role.value}
+
+
+@router.patch("/me")
+async def update_profile(
+    body: UpdateProfileRequest,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    display_name = body.display_name.strip()
+    if not display_name:
+        raise HTTPException(status_code=422, detail="Display name cannot be blank")
+    user.display_name = display_name
+    await db.commit()
     return {"id": user.id, "username": user.username, "display_name": user.display_name, "role": user.role.value}
 
 

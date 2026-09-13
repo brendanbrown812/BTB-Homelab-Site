@@ -4,10 +4,11 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, BookOpenText, CalendarDays, ChevronDown, ClipboardCheck, FilePenLine, History, LogOut, Menu, ShieldCheck, Trophy, X } from "lucide-react";
+import { BarChart3, BookOpenText, CalendarDays, ChevronDown, ClipboardCheck, FilePenLine, History, LogOut, Menu, ShieldCheck, Trophy, Vote, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
+import { EditProfileDialog } from "@/components/edit-profile-dialog";
 import { apiFetch, CurrentUser, getToken } from "@/lib/api";
 
 const predictionItems = [
@@ -38,17 +39,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     {predictionsExpanded && predictionItems.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setOpen(false)} className={itemClass(href)}><Icon className="h-[18px] w-[18px]" />{label}</Link>)}
     <NavSection label="PTGOTW" expanded={ptgotwExpanded} onToggle={() => setPtgotwExpanded(value => !value)} />
     {ptgotwExpanded && <><Link href="/ptgotw" onClick={() => setOpen(false)} className={itemClass("/ptgotw")}><BookOpenText className="h-[18px] w-[18px]" />Writeups</Link>{canSubmitWriteup && <Link href="/ptgotw/submit" onClick={() => setOpen(false)} className={itemClass("/ptgotw/submit")}><FilePenLine className="h-[18px] w-[18px]" />Submit writeup</Link>}</>}
-    {user.role === "admin" && <div className="mt-6 space-y-1 border-t border-white/8 pt-4"><Link href="/admin" onClick={() => setOpen(false)} className={itemClass("/admin")}><ShieldCheck className="h-[18px] w-[18px]" />Admin</Link><Link href="/admin/submissions" onClick={() => setOpen(false)} className={itemClass("/admin/submissions")}><ClipboardCheck className="h-[18px] w-[18px]" />Pick status</Link></div>}
+    <div className="mt-6 border-t border-white/8 pt-4"><Link href="/polls" onClick={() => setOpen(false)} className={itemClass("/polls")}><Vote className="h-[18px] w-[18px]" />Polls</Link></div>
+    {user.role === "admin" && <div className="mt-2 space-y-1"><Link href="/admin" onClick={() => setOpen(false)} className={itemClass("/admin")}><ShieldCheck className="h-[18px] w-[18px]" />Admin</Link><Link href="/admin/submissions" onClick={() => setOpen(false)} className={itemClass("/admin/submissions")}><ClipboardCheck className="h-[18px] w-[18px]" />Pick status</Link></div>}
   </>;
 
   return <div className="min-h-screen lg:grid lg:grid-cols-[245px_1fr]">
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-[245px] flex-col border-r border-white/8 bg-[#0b1019]/95 px-4 lg:flex"><Brand /><nav className="flex-1">{nav}</nav><Account user={user} onLogout={logout} /></aside>
-    {open && <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm lg:hidden" onClick={() => setOpen(false)}><aside className="flex h-full w-[280px] flex-col border-r border-white/10 bg-[#0b1019] px-4" onClick={e => e.stopPropagation()}><div className="flex items-center justify-between"><Brand /><button aria-label="Close navigation" onClick={() => setOpen(false)}><X /></button></div><nav className="flex-1">{nav}</nav><Account user={user} onLogout={logout} /></aside></div>}
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-[245px] flex-col border-r border-white/8 bg-[#0b1019]/95 px-4 lg:flex"><Brand /><nav className="flex-1">{nav}</nav><Account user={user} onUpdated={setUser} onLogout={logout} /></aside>
+    {open && <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm lg:hidden" onClick={() => setOpen(false)}><aside className="flex h-full w-[280px] flex-col border-r border-white/10 bg-[#0b1019] px-4" onClick={e => e.stopPropagation()}><div className="flex items-center justify-between"><Brand /><button aria-label="Close navigation" onClick={() => setOpen(false)}><X /></button></div><nav className="flex-1">{nav}</nav><Account user={user} onUpdated={setUser} onLogout={logout} /></aside></div>}
     <div className="lg:col-start-2"><header className="sticky top-0 z-20 flex h-[72px] items-center justify-between border-b border-white/8 bg-[#080b12]/80 px-5 backdrop-blur-xl sm:px-8 lg:px-10"><div className="flex items-center gap-3"><Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setOpen(true)}><Menu /></Button><div><p className="text-xs font-medium uppercase tracking-[.15em] text-slate-500">BTB</p><p className="text-sm font-semibold text-slate-200">Fantasy league hub</p></div></div><span className="hidden rounded-full border border-white/10 bg-white/[.04] px-3 py-2 text-sm text-slate-300 sm:block">Signed in as <strong className="text-white">{user.display_name}</strong></span></header><main className="mx-auto w-full max-w-[1580px] px-5 py-8 sm:px-8 lg:px-10 lg:py-10">{children}</main></div>
   </div>;
 }
 
-function Account({ user, onLogout }: { user: CurrentUser; onLogout: () => void }) { const initials = user.display_name.split(" ").map(v => v[0]).join("").slice(0, 2).toUpperCase(); return <div className="mb-5 rounded-2xl border border-white/8 bg-white/[.03] p-3"><div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-full bg-[#24334b] text-sm font-bold text-primary">{initials}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{user.display_name}</p><p className="text-xs capitalize text-slate-500">{user.role}</p></div><button onClick={onLogout} title="Sign out" aria-label="Sign out" className="rounded-lg p-2 text-slate-500 hover:bg-white/5 hover:text-white"><LogOut className="h-4 w-4" /></button></div><ChangePasswordDialog /></div>; }
+function Account({ user, onUpdated, onLogout }: { user: CurrentUser; onUpdated: (user: CurrentUser) => void; onLogout: () => void }) { const initials = user.display_name.split(" ").map(v => v[0]).join("").slice(0, 2).toUpperCase(); return <div className="mb-5 rounded-2xl border border-white/8 bg-white/[.03] p-3"><div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-full bg-[#24334b] text-sm font-bold text-primary">{initials}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{user.display_name}</p><p className="text-xs capitalize text-slate-500">{user.role}</p></div><button onClick={onLogout} title="Sign out" aria-label="Sign out" className="rounded-lg p-2 text-slate-500 hover:bg-white/5 hover:text-white"><LogOut className="h-4 w-4" /></button></div><EditProfileDialog user={user} onUpdated={onUpdated} /><ChangePasswordDialog /></div>; }
 function Brand() {
   return <Link href="/predictions" className="flex h-[84px] items-center gap-3">
     <img src="/images/BTB_Logo-ffcd3c.png" alt="" width={40} height={52} className="h-[52px] w-10 shrink-0 object-contain" />

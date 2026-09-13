@@ -10,6 +10,7 @@ from app.database.session import SessionLocal, engine
 from app.features.predictions.routes import router as predictions_router
 from app.features.predictions.admin_routes import router as admin_predictions_router
 from app.features.ptgotw.routes import router as ptgotw_router
+from app.features.polls.routes import router as polls_router
 from app.models.season import Season
 from app.models.user import User, UserRole
 from app.core.security import hash_password, verify_password
@@ -97,6 +98,7 @@ app.include_router(admin_router, prefix="/api")
 app.include_router(predictions_router, prefix="/api")
 app.include_router(admin_predictions_router, prefix="/api")
 app.include_router(ptgotw_router, prefix="/api")
+app.include_router(polls_router, prefix="/api")
 
 
 @app.get("/api/health")
