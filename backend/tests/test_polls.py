@@ -32,7 +32,7 @@ class PollTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(result["current_user_option_ids"], [poll["options"][0]["id"], poll["options"][1]["id"]])
             self.assertEqual(result["options"][0]["voters"][0]["display_name"], "League Member")
-            self.assertEqual([user["display_name"] for user in result["not_voted"]], ["Commissioner"])
+            self.assertEqual(result["not_voted"], [])
 
     async def test_single_choice_poll_rejects_multiple_options(self):
         async with self.sessions() as db:

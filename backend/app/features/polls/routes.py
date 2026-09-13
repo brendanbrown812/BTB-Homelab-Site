@@ -77,7 +77,7 @@ async def _poll_payload(poll: Poll, viewer: User, db: AsyncSession) -> dict:
         "not_voted": [
             {"id": active_user.id, "display_name": active_user.display_name}
             for active_user in active_users
-            if active_user.id not in voted_user_ids
+            if active_user.role is UserRole.user and active_user.id not in voted_user_ids
         ],
     }
 
