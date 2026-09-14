@@ -24,6 +24,7 @@ export type PTGWriteup = {
   author: { id: string; display_name: string };
   updated_at: string;
   submitted_by_author?: boolean;
+  due_date?: string | null;
   is_published?: boolean;
   has_content?: boolean;
 };
@@ -33,6 +34,7 @@ export type PTGWriteupList = {
   available_years: number[];
   writeups: Array<Omit<PTGWriteup, "content_html">>;
 };
+export type UpcomingWriteup = { id: string; year: number; week: number; due_date: string; days_remaining: number };
 export type PTGComment = {
   id: string;
   parent_id: string | null;

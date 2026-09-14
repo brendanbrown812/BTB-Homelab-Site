@@ -27,6 +27,8 @@ def _ensure_local_schema_columns(connection):
         writeup_columns = {column["name"] for column in inspector.get_columns("ptgotw_writeups")}
         if "is_published" not in writeup_columns:
             connection.execute(text("ALTER TABLE ptgotw_writeups ADD COLUMN is_published BOOLEAN NOT NULL DEFAULT 1"))
+        if "due_date" not in writeup_columns:
+            connection.execute(text("ALTER TABLE ptgotw_writeups ADD COLUMN due_date DATE"))
 
 
 @asynccontextmanager

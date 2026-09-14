@@ -1,7 +1,8 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from html import escape
 from html.parser import HTMLParser
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -15,6 +16,9 @@ from app.features.ptgotw.models import PTGWriteup, PTGWriteupComment
 from app.models.user import User, UserRole
 
 router = APIRouter(prefix="/ptgotw", tags=["PTGOTW"])
+LEAGUE_TIMEZONE = ZoneInfo("America/Chicago")
+AUTHOR_PUBLISH_LEAD_DAYS = 7
+AUTHOR_GRACE_DAYS = 7
 ALLOWED_TAGS = {"b", "strong", "i", "em", "u", "p", "div", "br", "ol", "ul", "li"}
 VOID_TAGS = {"br"}
 
@@ -47,6 +51,7 @@ class WriteupCreate(BaseModel):
     week: int = Field(ge=1, le=18)
     author_id: uuid.UUID
     submitted_by_author: bool = False
+    due_date: date | None = None
     content_html: str = Field(default="", max_length=120000)
     is_published: bool = False
 
@@ -57,6 +62,7 @@ class WriteupUpdate(BaseModel):
     week: int | None = Field(default=None, ge=1, le=18)
     author_id: uuid.UUID | None = None
     submitted_by_author: bool | None = None
+    due_date: date | None = None
     is_published: bool | None = None
 
 
@@ -86,6 +92,24 @@ def _clean_comment(value: str) -> str:
     if not content:
         raise HTTPException(status_code=422, detail="Comment cannot be blank")
     return content
+
+
+def _league_today() -> date:
+    return datetime.now(LEAGUE_TIMEZONE).date()
+
+
+def _author_edit_window_open(writeup: PTGWriteup, today: date | None = None) -> bool:
+    if writeup.due_date is None:
+        return False
+    current_date = today or _league_today()
+    return current_date <= writeup.due_date + timedelta(days=AUTHOR_GRACE_DAYS)
+
+
+def _author_publish_window_open(writeup: PTGWriteup, today: date | None = None) -> bool:
+    if writeup.due_date is None:
+        return False
+    current_date = today or _league_today()
+    return writeup.due_date - timedelta(days=AUTHOR_PUBLISH_LEAD_DAYS) <= current_date <= writeup.due_date + timedelta(days=AUTHOR_GRACE_DAYS)
 
 
 async def _published_writeup(db: AsyncSession, writeup_id: uuid.UUID) -> PTGWriteup:
@@ -151,6 +175,8 @@ def _payload(writeup: PTGWriteup, author_name: str, viewer: User, include_conten
         result["submitted_by_author"] = writeup.submitted_by_author
         result["has_content"] = bool(writeup.content_html)
     if viewer.role is UserRole.admin or (viewer.id == writeup.author_id and writeup.submitted_by_author):
+        result["due_date"] = writeup.due_date
+    if viewer.role is UserRole.admin or (viewer.id == writeup.author_id and writeup.submitted_by_author):
         result["is_published"] = writeup.is_published
     return result
 
@@ -186,7 +212,40 @@ async def editable_writeups(user: User = Depends(current_user), db: AsyncSession
     if user.role is not UserRole.admin:
         query = query.where(PTGWriteup.author_id == user.id, PTGWriteup.submitted_by_author.is_(True))
     rows = (await db.execute(query.order_by(PTGWriteup.year.desc(), PTGWriteup.week.desc()))).all()
+    if user.role is not UserRole.admin:
+        rows = [(writeup, author_name) for writeup, author_name in rows if _author_edit_window_open(writeup)]
     return [_payload(writeup, author_name, user) for writeup, author_name in rows]
+
+
+@router.get("/upcoming")
+async def upcoming_writeup(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    if user.role is UserRole.admin:
+        return None
+    today = _league_today()
+    rows = (
+        await db.scalars(
+            select(PTGWriteup)
+            .where(
+                PTGWriteup.author_id == user.id,
+                PTGWriteup.submitted_by_author.is_(True),
+                PTGWriteup.is_published.is_(False),
+                PTGWriteup.due_date.is_not(None),
+                PTGWriteup.due_date >= today,
+                PTGWriteup.due_date <= today + timedelta(days=14),
+            )
+            .order_by(PTGWriteup.due_date, PTGWriteup.week)
+        )
+    ).all()
+    writeup = rows[0] if rows else None
+    if not writeup or writeup.due_date is None:
+        return None
+    return {
+        "id": writeup.id,
+        "year": writeup.year,
+        "week": writeup.week,
+        "due_date": writeup.due_date,
+        "days_remaining": (writeup.due_date - today).days,
+    }
 
 
 @router.get("/authors", dependencies=[Depends(admin_user)])
@@ -201,11 +260,14 @@ async def create_writeup(body: WriteupCreate, admin: User = Depends(admin_user),
     content_html = _clean_content(body.content_html)
     if body.is_published and not content_html:
         raise HTTPException(status_code=422, detail="Add the writeup before publishing it")
+    if body.submitted_by_author and body.due_date is None:
+        raise HTTPException(status_code=422, detail="Add a due date when assigning a writeup to its author")
     writeup = PTGWriteup(
         year=body.year,
         week=body.week,
         author_id=body.author_id,
         submitted_by_author=body.submitted_by_author,
+        due_date=body.due_date,
         content_html=content_html,
         is_published=body.is_published,
         created_by_user_id=admin.id,
@@ -279,7 +341,7 @@ async def delete_writeup(writeup_id: uuid.UUID, _: User = Depends(admin_user), d
 @router.get("/{writeup_id}")
 async def get_writeup(writeup_id: uuid.UUID, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
     writeup = await db.get(PTGWriteup, writeup_id)
-    if not writeup or (not writeup.is_published and user.role is not UserRole.admin and not (writeup.author_id == user.id and writeup.submitted_by_author)):
+    if not writeup or (not writeup.is_published and user.role is not UserRole.admin and not (writeup.author_id == user.id and writeup.submitted_by_author and _author_edit_window_open(writeup))):
         raise HTTPException(status_code=404, detail="Writeup not found")
     return _payload(writeup, await _author_name(db, writeup.author_id), user)
 
@@ -290,8 +352,10 @@ async def update_writeup(writeup_id: uuid.UUID, body: WriteupUpdate, user: User 
     if not writeup:
         raise HTTPException(status_code=404, detail="Writeup not found")
     is_admin = user.role is UserRole.admin
-    if not is_admin and not (writeup.author_id == user.id and writeup.submitted_by_author):
+    if not is_admin and not (writeup.author_id == user.id and writeup.submitted_by_author and _author_edit_window_open(writeup)):
         raise HTTPException(status_code=403, detail="You do not have permission to edit this writeup")
+    if not is_admin and body.is_published is True and not writeup.is_published and not _author_publish_window_open(writeup):
+        raise HTTPException(status_code=403, detail="You can publish this writeup starting seven days before its due date")
     if is_admin:
         if body.year is not None:
             writeup.year = body.year
@@ -302,6 +366,10 @@ async def update_writeup(writeup_id: uuid.UUID, body: WriteupUpdate, user: User 
             writeup.author_id = body.author_id
         if body.submitted_by_author is not None:
             writeup.submitted_by_author = body.submitted_by_author
+        if "due_date" in body.model_fields_set:
+            writeup.due_date = body.due_date
+        if writeup.submitted_by_author and writeup.due_date is None:
+            raise HTTPException(status_code=422, detail="Add a due date when assigning a writeup to its author")
     content_html = _clean_content(body.content_html)
     next_published = body.is_published if body.is_published is not None else writeup.is_published
     if next_published and not content_html:
