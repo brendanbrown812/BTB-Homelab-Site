@@ -51,3 +51,4 @@ __pycache__/
 *.py[cod]
 .venv/
 .btb-venv/
+/backend/btb-local.db
