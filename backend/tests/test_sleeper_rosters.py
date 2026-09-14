@@ -55,6 +55,31 @@ class SleeperRosterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first.team_a_bench[0].injury_status, "Q")
         self.assertEqual(first.team_a_avatar_url, "https://sleepercdn.com/avatars/thumbs/avatar-one")
 
+    async def test_archive_uses_shared_client_for_all_history_endpoints(self):
+        class ArchiveClient:
+            def __init__(self):
+                self.matchup_weeks = []
+                self.transaction_rounds = []
+
+            async def league(self, league_id): return {"league_id": league_id}
+            async def users(self, _league_id): return [{"user_id": "u1"}]
+            async def rosters(self, _league_id): return [{"roster_id": 1}]
+            async def winners_bracket(self, _league_id): return [{"p": 1}]
+            async def losers_bracket(self, _league_id): return [{"p": 2}]
+            async def matchups(self, _league_id, week):
+                self.matchup_weeks.append(week)
+                return [{"week": week}]
+            async def transactions(self, _league_id, round_number):
+                self.transaction_rounds.append(round_number)
+                return [{"round": round_number}]
+
+        client = ArchiveClient()
+        result = await SleeperService(client).league_archive("history", max_week=2)  # type: ignore[arg-type]
+        self.assertEqual(result.league["league_id"], "history")
+        self.assertEqual(sorted(client.matchup_weeks), [1, 2])
+        self.assertEqual(sorted(client.transaction_rounds), [0, 1, 2])
+        self.assertEqual(result.matchups_by_week[2][0]["week"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

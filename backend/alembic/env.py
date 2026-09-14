@@ -8,6 +8,8 @@ from app.models.user import User  # noqa: F401
 from app.models.season import Season  # noqa: F401
 from app.features.predictions.models import Prediction, PredictionMatchup, PredictionWeek  # noqa: F401
 from app.features.ptgotw.models import PTGWriteup  # noqa: F401
+from app.features.polls.models import Poll, PollOption, PollVote  # noqa: F401
+from app.features.league_history import models as league_history_models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)

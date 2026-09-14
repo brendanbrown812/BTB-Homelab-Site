@@ -11,6 +11,10 @@ from app.features.predictions.routes import router as predictions_router
 from app.features.predictions.admin_routes import router as admin_predictions_router
 from app.features.ptgotw.routes import router as ptgotw_router
 from app.features.polls.routes import router as polls_router
+from app.features.league_history import models as league_history_models  # noqa: F401
+from app.features.league_history.routes import admin_router as admin_league_history_router
+from app.features.league_history.routes import router as league_history_router
+from app.features.league_history.public_routes import router as public_league_history_router
 from app.models.season import Season
 from app.models.user import User, UserRole
 from app.core.security import hash_password, verify_password
@@ -29,14 +33,60 @@ def _ensure_local_schema_columns(connection):
             connection.execute(text("ALTER TABLE ptgotw_writeups ADD COLUMN is_published BOOLEAN NOT NULL DEFAULT 1"))
         if "due_date" not in writeup_columns:
             connection.execute(text("ALTER TABLE ptgotw_writeups ADD COLUMN due_date DATE"))
+    if "league_transaction_players" in inspector.get_table_names():
+        transaction_player_columns = {
+            column["name"] for column in inspector.get_columns("league_transaction_players")
+        }
+        if "player_name" not in transaction_player_columns:
+            connection.execute(text(
+                "ALTER TABLE league_transaction_players ADD COLUMN player_name VARCHAR(160)"
+            ))
+    if "seasons" in inspector.get_table_names():
+        season_columns = {column["name"]: column for column in inspector.get_columns("seasons")}
+        needs_season_rebuild = (
+            "platform" not in season_columns
+            or not season_columns["sleeper_league_id"]["nullable"]
+        )
+        if needs_season_rebuild:
+            platform_expression = "platform" if "platform" in season_columns else "'sleeper'"
+            connection.execute(text("DROP TABLE IF EXISTS seasons__league_history_upgrade"))
+            connection.execute(text("""
+                CREATE TABLE seasons__league_history_upgrade (
+                    id CHAR(32) NOT NULL PRIMARY KEY,
+                    year INTEGER NOT NULL,
+                    platform VARCHAR(7) NOT NULL DEFAULT 'sleeper',
+                    sleeper_league_id VARCHAR(80),
+                    is_active BOOLEAN NOT NULL,
+                    CONSTRAINT uq_seasons_year UNIQUE (year),
+                    CONSTRAINT uq_seasons_sleeper_league_id UNIQUE (sleeper_league_id),
+                    CONSTRAINT ck_seasons_sleeper_requires_league_id
+                        CHECK (platform <> 'sleeper' OR sleeper_league_id IS NOT NULL)
+                )
+            """))
+            connection.execute(text(f"""
+                INSERT INTO seasons__league_history_upgrade
+                    (id, year, platform, sleeper_league_id, is_active)
+                SELECT id, year, {platform_expression}, sleeper_league_id, is_active
+                FROM seasons
+            """))
+            connection.execute(text("DROP TABLE seasons"))
+            connection.execute(text("ALTER TABLE seasons__league_history_upgrade RENAME TO seasons"))
+            connection.execute(text("CREATE UNIQUE INDEX ix_seasons_year ON seasons (year)"))
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     if settings.local_create_schema:
-        async with engine.begin() as connection:
-            await connection.run_sync(Base.metadata.create_all)
-            await connection.run_sync(_ensure_local_schema_columns)
+        async with engine.connect() as connection:
+            if engine.dialect.name == "sqlite":
+                await connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+                await connection.commit()
+            async with connection.begin():
+                await connection.run_sync(Base.metadata.create_all)
+                await connection.run_sync(_ensure_local_schema_columns)
+            if engine.dialect.name == "sqlite":
+                await connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+                await connection.commit()
     if settings.sleeper_league_id and settings.sleeper_league_id != "put-your-sleeper-league-id-here":
         async with SessionLocal() as db:
             season = await db.scalar(select(Season).where(Season.year == settings.season_year))
@@ -45,6 +95,8 @@ async def lifespan(_: FastAPI):
                 season.is_active = True
             else:
                 db.add(Season(year=settings.season_year, sleeper_league_id=settings.sleeper_league_id, is_active=True))
+            for other in (await db.scalars(select(Season).where(Season.year != settings.season_year, Season.is_active.is_(True)))).all():
+                other.is_active = False
             await db.commit()
     bootstrap_password = settings.bootstrap_admin_password
     if bootstrap_password == "replace-with-a-temporary-admin-password":
@@ -101,6 +153,9 @@ app.include_router(predictions_router, prefix="/api")
 app.include_router(admin_predictions_router, prefix="/api")
 app.include_router(ptgotw_router, prefix="/api")
 app.include_router(polls_router, prefix="/api")
+app.include_router(admin_league_history_router, prefix="/api")
+app.include_router(league_history_router, prefix="/api")
+app.include_router(public_league_history_router, prefix="/api")
 
 
 @app.get("/api/health")

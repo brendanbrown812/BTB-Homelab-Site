@@ -25,7 +25,14 @@ export default function SubmissionStatusPage() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<CurrentSubmissionStatus>("/admin/predictions/current/submissions")
+      .then(value => { if (!cancelled) setData(value); })
+      .catch(reason => { if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not load submission status."); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   const completeUsers = useMemo(
     () => data?.users.filter(user => data.total_matchups > 0 && user.submitted_picks >= data.total_matchups).length ?? 0,

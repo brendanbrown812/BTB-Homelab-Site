@@ -1,6 +1,6 @@
 # BTB League Website
 
-BTB is a private, homelab-friendly website for one fantasy football league. The first finished feature is weekly winner predictions; the core account, season, navigation, database, and Sleeper integration layers are reusable by future league features.
+BTB is a private, homelab-friendly website for one fantasy football league. It combines weekly prediction games with a separate, authenticated league-history archive backed by PostgreSQL.
 
 ## Included
 
@@ -14,6 +14,11 @@ BTB is a private, homelab-friendly website for one fantasy football league. The 
 - Weekly records, standings, history, and champions
 - Admin refresh, finalize, and recalculate endpoints
 - PostgreSQL persistence, Alembic migrations, and Docker Compose
+- Permanent manager profiles that survive team-name changes and do not require BTB login accounts
+- ESPN-era matchup history for 2020–2021 through a one-time Notion import
+- Idempotent Sleeper history imports for teams, matchups, placements, trades, waivers, free agents, picks, and FAAB
+- Public league overview, teams, seasons, records, trades, and waiver-wire pages for authenticated members
+- Commissioner-managed placements, punishments, custom facts, identity aliases, and manual weekly-highlight corrections
 
 ## Architecture
 
@@ -24,11 +29,13 @@ backend/app/core/                 configuration and security
 backend/app/database/             shared PostgreSQL session/base
 backend/app/models/               BTB-wide User and Season models
 backend/app/services/sleeper/     reusable Sleeper adapter
+backend/app/services/notion/      read-only one-time Notion adapter
 backend/app/features/predictions/ prediction API, models and scoring
+backend/app/features/league_history/ league archive, imports and statistics
 backend/alembic/                  database migrations
 ```
 
-Sleeper is the source of truth for fantasy matchups and scores. PostgreSQL is the source of truth for accounts, picks, results, and retained prediction history. Sleeper payloads are normalized by the shared service before prediction code sees them.
+Sleeper is the live source for current fantasy data and the import source for Sleeper-era seasons. Notion is used only once for the 2020–2021 ESPN Game History archive. PostgreSQL is authoritative for league-history pages after import, as well as accounts, predictions, corrections, and commissioner-entered history. League-history routes do not read prediction, PTGOTW, or poll tables.
 
 ## Run with Docker
 
@@ -61,6 +68,20 @@ Every local session is also written to `logs/backend.log` and
 output needed to diagnose a failure later.
 
 All prediction screens use the authenticated BTB API. The API refreshes the active week's teams, owners, records, matchups, and scores from Sleeper; no sample league records are shown when Sleeper is unavailable or unconfigured.
+
+The historical 2020–2021 ESPN matchup archive can be imported once from
+Notion. See [the Notion game-history import runbook](docs/notion-game-history-import.md).
+
+## League history setup
+
+1. Apply the migrations by starting the API.
+2. In **Admin → League history**, create one permanent Manager per person, including former members without BTB accounts.
+3. Link current managers to BTB users where appropriate. Add all historical Notion-name aliases and stable Sleeper user-ID aliases before importing.
+4. Create 2020 and 2021 as ESPN seasons with no Sleeper league ID. Follow the one-time Notion runbook, review the dry run, and commit only after every name resolves.
+5. Create each season from 2022 onward as Sleeper and enter that season's league ID in the admin screen. Dry-run and then import each season. Refreshing an imported Sleeper season is idempotent; commissioner placement overrides, manual highlights, and custom facts remain intact.
+6. Keep exactly one season active. When a league is renewed, create the new season and enter its new Sleeper league ID rather than replacing an older ID.
+
+The commissioner must still enter information that neither source contains reliably: manager biographies and BTB user links, historical aliases, ESPN final placements, placement corrections, punishment titles and assignees, custom season facts, and weekly awards unavailable from stored Sleeper player details. Lineup-efficiency awards currently require manual entry because the retained data does not contain enough roster-slot eligibility information to calculate an optimal lineup safely.
 
 ## Security
 

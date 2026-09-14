@@ -43,6 +43,17 @@ class SleeperMatchup:
     team_b_bench: tuple[SleeperPlayer, ...] = ()
 
 
+@dataclass(frozen=True)
+class SleeperLeagueArchive:
+    league: dict
+    users: tuple[dict, ...]
+    rosters: tuple[dict, ...]
+    matchups_by_week: dict[int, tuple[dict, ...]]
+    transactions_by_round: dict[int, tuple[dict, ...]]
+    winners_bracket: tuple[dict, ...]
+    losers_bracket: tuple[dict, ...]
+
+
 class SleeperService:
     """BTB-wide adapter that keeps Sleeper payloads out of feature routes."""
     def __init__(self, client: SleeperClient | None = None):
@@ -72,7 +83,85 @@ class SleeperService:
                 if isinstance(details, dict)
             }
             _player_cache_expires_at = monotonic() + PLAYER_CACHE_SECONDS
-            return catalog
+            return _player_cache
+
+    async def league_metadata(self, league_id: str) -> dict:
+        return await self.client.league(league_id)
+
+    async def league_users(self, league_id: str) -> list[dict]:
+        return await self.client.users(league_id)
+
+    async def league_rosters(self, league_id: str) -> list[dict]:
+        return await self.client.rosters(league_id)
+
+    async def league_week_matchups(self, league_id: str, week: int) -> list[dict]:
+        return await self.client.matchups(league_id, week)
+
+    async def league_winners_bracket(self, league_id: str) -> list[dict]:
+        return await self.client.winners_bracket(league_id)
+
+    async def league_losers_bracket(self, league_id: str) -> list[dict]:
+        return await self.client.losers_bracket(league_id)
+
+    async def league_transactions(self, league_id: str, round_number: int) -> list[dict]:
+        return await self.client.transactions(league_id, round_number)
+
+    async def player_lookup(self, player_ids: set[str]) -> dict[str, SleeperPlayer]:
+        catalog = await self._players()
+        result: dict[str, SleeperPlayer] = {}
+        for player_id in player_ids:
+            details = catalog.get(str(player_id)) or {}
+            position = details.get("position") or next(iter(details.get("fantasy_positions") or []), None)
+            first_name = details.get("first_name") or ""
+            last_name = details.get("last_name") or ""
+            name = details.get("full_name") or f"{first_name} {last_name}".strip() or f"Player {player_id}"
+            result[str(player_id)] = SleeperPlayer(
+                player_id=str(player_id), name=name, position=position or "—",
+                team=details.get("team"), injury_status=details.get("injury_status"),
+                points=None,
+                image_url=(
+                    f"https://sleepercdn.com/content/nfl/players/thumb/{player_id}.jpg"
+                    if str(player_id).isdigit() else None
+                ),
+            )
+        return result
+
+    async def current_roster(self, league_id: str, roster_id: int) -> tuple[SleeperPlayer, ...]:
+        """Return one roster and the cached catalog without loading league history."""
+        rosters = await self.league_rosters(league_id)
+        roster = next((row for row in rosters if int(row.get("roster_id", -1)) == roster_id), None)
+        if roster is None:
+            return ()
+        player_ids = {str(value) for value in roster.get("players") or [] if value and str(value) != "0"}
+        players = await self.player_lookup(player_ids)
+        position_order = {"QB": 0, "RB": 1, "WR": 2, "TE": 3, "K": 4, "DEF": 5}
+        return tuple(sorted(
+            players.values(),
+            key=lambda player: (position_order.get(player.position, 99), player.name),
+        ))
+
+    async def league_archive(self, league_id: str, max_week: int = 18) -> SleeperLeagueArchive:
+        """Fetch one immutable view of a league through the shared Sleeper adapter."""
+        league, users, rosters, winners, losers = await asyncio.gather(
+            self.league_metadata(league_id),
+            self.league_users(league_id),
+            self.league_rosters(league_id),
+            self.league_winners_bracket(league_id),
+            self.league_losers_bracket(league_id),
+        )
+        matchup_rows, transaction_rows = await asyncio.gather(
+            asyncio.gather(*(self.league_week_matchups(league_id, week) for week in range(1, max_week + 1))),
+            asyncio.gather(*(self.league_transactions(league_id, round_number) for round_number in range(0, max_week + 1))),
+        )
+        return SleeperLeagueArchive(
+            league=league,
+            users=tuple(users),
+            rosters=tuple(rosters),
+            matchups_by_week={week: tuple(rows) for week, rows in enumerate(matchup_rows, start=1)},
+            transactions_by_round={round_number: tuple(rows) for round_number, rows in enumerate(transaction_rows)},
+            winners_bracket=tuple(winners),
+            losers_bracket=tuple(losers),
+        )
 
     async def weekly_matchups(self, league_id: str, week: int, include_players: bool = False) -> list[SleeperMatchup]:
         rows, rosters, users = await asyncio.gather(

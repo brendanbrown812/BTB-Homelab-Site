@@ -28,6 +28,15 @@ class SleeperClient:
     async def matchups(self, league_id: str, week: int) -> list[dict]:
         return await self.get(f"/league/{league_id}/matchups/{week}")  # type: ignore[return-value]
 
+    async def winners_bracket(self, league_id: str) -> list[dict]:
+        return await self.get(f"/league/{league_id}/winners_bracket")  # type: ignore[return-value]
+
+    async def losers_bracket(self, league_id: str) -> list[dict]:
+        return await self.get(f"/league/{league_id}/losers_bracket")  # type: ignore[return-value]
+
+    async def transactions(self, league_id: str, round_number: int) -> list[dict]:
+        return await self.get(f"/league/{league_id}/transactions/{round_number}")  # type: ignore[return-value]
+
     async def players(self, sport: str = "nfl") -> dict[str, dict]:
         # Sleeper's player catalog is about 5 MB, so allow more time than the
         # smaller league endpoints. SleeperService caches it for 24 hours.

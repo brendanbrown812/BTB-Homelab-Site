@@ -1,3 +1,3 @@
-from .service import SleeperMatchup, SleeperPlayer, SleeperService
+from .service import SleeperLeagueArchive, SleeperMatchup, SleeperPlayer, SleeperService
 
-__all__ = ["SleeperMatchup", "SleeperPlayer", "SleeperService"]
+__all__ = ["SleeperLeagueArchive", "SleeperMatchup", "SleeperPlayer", "SleeperService"]
