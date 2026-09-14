@@ -47,8 +47,12 @@ export function LeagueHistoryAdmin() {
   const mutate: Mutation = async (path, init, success) => {
     setSaving(true); setError(""); setNotice("");
     try {
-      await apiFetch(path, init);
+      const result = await apiFetch<unknown>(path, init);
       await load();
+      if (isImportFailure(result)) {
+        setError(importFailureMessage(result));
+        return false;
+      }
       setNotice(success);
       return true;
     } catch (reason) {
@@ -130,17 +134,27 @@ function SeasonDetails({ data, seasonId, onSeasonChange, mutate, saving }: { dat
 
 function SleeperImportPanel({ season, data, mutate, saving }: { season: ManagedLeagueSeason; data: LeagueHistoryAdminState; mutate: Mutation; saving: boolean }) {
   const latest = data.import_runs.find(run => run.season_id === season.id && run.source === "sleeper");
-  const unresolved = Array.isArray(latest?.counts.unresolved_identities) ? latest.counts.unresolved_identities.length : 0;
+  const unresolvedRows = objectArray(latest?.counts.unresolved_identities);
+  const unresolved = unresolvedRows.length;
+  const teams = numberValue(latest?.counts.season_teams);
+  const matchups = numberValue(latest?.counts.matchups);
+  const transactions = numberValue(latest?.counts.transactions);
+  const placements = numberValue(latest?.counts.calculated_placements);
   return <Subsection title="Sleeper import" icon={<Database />}>
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="text-sm text-slate-400">
-        <p>Preview identity mappings before atomically importing teams, matchups, transactions, and placements.</p>
-        {latest && <p className="mt-1 text-xs text-slate-500">Last attempt: <span className={latest.status === "succeeded" ? "text-emerald-300" : latest.status === "needs_attention" ? "text-amber-300" : "text-red-300"}>{latest.status.replace("_", " ")}</span>{unresolved ? ` · ${unresolved} unresolved` : ""}{latest.error_details ? ` · ${latest.error_details}` : ""}</p>}
+    <div className="space-y-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-sm text-slate-400">
+          <p>Preview identity mappings before atomically importing teams, matchups, transactions, and placements.</p>
+          {latest && <p className="mt-1 text-xs text-slate-500">Last attempt: <span className={latest.status === "succeeded" ? "text-emerald-300" : latest.status === "needs_attention" ? "text-amber-300" : latest.status === "running" ? "text-sky-300" : "text-red-300"}>{latest.status.replace("_", " ")}</span>{unresolved ? ` · ${unresolved} unresolved` : ""}{latest.error_details ? ` · ${latest.error_details}` : ""}</p>}
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <Button variant="outline" disabled={saving} onClick={() => void mutate(`/admin/league-history/seasons/${season.id}/sleeper/dry-run`, { method: "POST" }, "Sleeper dry run completed.")}><RefreshCw className="h-4 w-4" />Dry run</Button>
+          <Button className="bg-primary font-bold text-primary-foreground" disabled={saving} onClick={() => void mutate(`/admin/league-history/seasons/${season.id}/sleeper/import`, { method: "POST" }, "Sleeper season imported.")}><Database className="h-4 w-4" />Import / refresh</Button>
+        </div>
       </div>
-      <div className="flex shrink-0 gap-2">
-        <Button variant="outline" disabled={saving} onClick={() => void mutate(`/admin/league-history/seasons/${season.id}/sleeper/dry-run`, { method: "POST" }, "Sleeper dry run completed.")}><RefreshCw className="h-4 w-4" />Dry run</Button>
-        <Button className="bg-primary font-bold text-primary-foreground" disabled={saving} onClick={() => void mutate(`/admin/league-history/seasons/${season.id}/sleeper/import`, { method: "POST" }, "Sleeper season imported.")}><Database className="h-4 w-4" />Import / refresh</Button>
-      </div>
+      {latest && <div className="grid gap-2 grid-cols-2 lg:grid-cols-4"><ImportMetric label="Season teams" value={teams} /><ImportMetric label="Matchups" value={matchups} /><ImportMetric label="Transactions" value={transactions} /><ImportMetric label="Placements" value={placements} /></div>}
+      {unresolved > 0 && <ImportIssueList title="Sleeper identities to map" items={unresolvedRows.map(item => `${String(item.display_name ?? "Unknown Sleeper user")} · user ID ${String(item.sleeper_user_id ?? "missing")} · roster ${String(item.roster_id ?? "unknown")}`)} />}
+      {latest && latest.status === "succeeded" && matchups === 0 && <p className="rounded-xl border border-amber-300/15 bg-amber-300/[.06] px-4 py-3 text-sm text-amber-200"><TriangleAlert className="mr-2 inline h-4 w-4" />Sleeper returned no paired matchups for this season. Verify that the configured ID belongs to this exact league year.</p>}
     </div>
   </Subsection>;
 }
@@ -207,9 +221,21 @@ function recordOfNumbers(value: unknown): Record<string, number> {
   return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, number] => typeof entry[1] === "number"));
 }
 function arrayLength(value: unknown) { return Array.isArray(value) ? value.length : 0; }
+function numberValue(value: unknown) { return typeof value === "number" && Number.isFinite(value) ? value : 0; }
 function stringArray(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []; }
 function objectArray(value: unknown): Array<Record<string, unknown>> { return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => !!item && typeof item === "object" && !Array.isArray(item)) : []; }
 function sumValues(value: Record<string, number>) { return Object.values(value).reduce((total, count) => total + count, 0); }
+
+function isImportFailure(value: unknown): value is { status: string; error?: string; counts?: Record<string, unknown> } {
+  return !!value && typeof value === "object" && "status" in value && typeof value.status === "string" && value.status !== "succeeded";
+}
+
+function importFailureMessage(value: { status: string; error?: string; counts?: Record<string, unknown> }) {
+  if (typeof value.error === "string" && value.error) return value.error;
+  const unresolved = Array.isArray(value.counts?.unresolved_identities) ? value.counts.unresolved_identities.length : 0;
+  if (unresolved) return `Sleeper import needs attention: ${unresolved} manager ${unresolved === 1 ? "identity is" : "identities are"} unresolved.`;
+  return `Import ${value.status.replace("_", " ")}. Review the latest attempt below.`;
+}
 
 function TeamDialog({ season, managers, mutate, saving, team }: { season: ManagedLeagueSeason; managers: LeagueManager[]; mutate: Mutation; saving: boolean; team?: LeagueSeasonTeam }) {
   const [open, setOpen] = useState(false);

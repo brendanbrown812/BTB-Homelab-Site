@@ -179,6 +179,27 @@ class SleeperImporterTests(unittest.IsolatedAsyncioTestCase):
             run = await db.scalar(select(ImportRun))
             self.assertFalse(run.counts["placement_complete"])
 
+    async def test_completed_season_with_no_matchups_needs_attention(self):
+        async with self.sessions() as db:
+            season, _ = await self._seed(db)
+            value = archive()
+            empty = SleeperLeagueArchive(
+                league={**value.league, "status": "complete"},
+                users=value.users,
+                rosters=value.rosters,
+                matchups_by_week={},
+                transactions_by_round=value.transactions_by_round,
+                winners_bracket=value.winners_bracket,
+                losers_bracket=value.losers_bracket,
+            )
+
+            result = await import_sleeper_season(db, season.id, sleeper=FakeSleeperService(empty))
+
+            self.assertEqual(result["status"], "needs_attention")
+            self.assertEqual(await db.scalar(select(func.count()).select_from(SeasonTeam)), 0)
+            run = await db.get(ImportRun, result["run_id"])
+            self.assertIn("no paired matchups", run.error_details)
+
 
 if __name__ == "__main__":
     unittest.main()

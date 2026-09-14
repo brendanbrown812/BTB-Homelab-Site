@@ -178,6 +178,7 @@ async def import_sleeper_season(
                 # endpoint is temporarily unavailable.
                 counts["player_lookup_failed"] = True
         calculated = _placements(archive.winners_bracket, archive.losers_bracket)
+        league_status = str(archive.league.get("status") or "").lower()
         counts.update({
             "matchups": len(matchup_pairs),
             "transactions": len(transactions),
@@ -185,6 +186,19 @@ async def import_sleeper_season(
             "calculated_placements": len(calculated),
             "placement_complete": len(calculated) == len(roster_rows),
         })
+
+        if not roster_rows:
+            await _finish_run(
+                db, run_id, ImportRunStatus.needs_attention, counts,
+                "Sleeper returned no rosters for this league ID",
+            )
+            return {"run_id": run_id, "status": ImportRunStatus.needs_attention.value, "counts": counts}
+        if league_status in {"complete", "completed"} and not matchup_pairs:
+            await _finish_run(
+                db, run_id, ImportRunStatus.needs_attention, counts,
+                "Sleeper returned no paired matchups for this completed season",
+            )
+            return {"run_id": run_id, "status": ImportRunStatus.needs_attention.value, "counts": counts}
 
         if dry_run:
             await _finish_run(db, run_id, ImportRunStatus.succeeded, counts)
@@ -206,7 +220,6 @@ async def import_sleeper_season(
             LeagueMatchup.season_id == season.id, LeagueMatchup.source == HistorySource.sleeper
         ))).all()
         matchup_by_key = {item.source_key: item for item in existing_matchups}
-        league_status = str(archive.league.get("status") or "").lower()
         current_leg_value = (archive.league.get("settings") or {}).get("leg")
         current_leg = int(current_leg_value) if current_leg_value is not None else None
         for week, matchup_id, row_a, row_b in matchup_pairs:
