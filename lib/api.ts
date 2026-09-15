@@ -91,6 +91,13 @@ export type LeagueHistoryAdminState = {
 export type ManagerSelfProfile = { manager: { id: string; display_name: string; biography: string } | null };
 export type LeagueCareerRecord = { wins: number; losses: number; ties: number; points_for: number; points_against: number };
 export type PublicLeagueManager = { id: string; display_name: string; biography: string; is_active: boolean; seasons_played: number; championships: number; biggest_losers: number; team_names: string[]; latest_team_name: string | null; career: LeagueCareerRecord; transaction_total: number; punishment_total: number };
+export type HeadToHeadManager = { id: string; display_name: string; is_active: boolean };
+export type HeadToHeadSide = { id: string; display_name: string; wins: number; points_for: number; average_score: number };
+export type HeadToHeadGame = { id: string; season_id: string; year: number; week: number; week_end: number | null; team_a_name: string; team_b_name: string; score_a: number; score_b: number; winner_id: string | null; margin: number; source: "notion" | "sleeper" | "manual" };
+export type PublicHeadToHead = {
+  managers: HeadToHeadManager[];
+  comparison: { manager_a: HeadToHeadSide; manager_b: HeadToHeadSide; ties: number; total_matchups: number; games: HeadToHeadGame[] } | null;
+};
 export type PublicManagerDetail = {
   manager: Pick<PublicLeagueManager, "id" | "display_name" | "biography" | "is_active">;
   seasons: Array<{ season_id: string; year: number; platform: "espn" | "sleeper"; team_name: string; placement: number | null; placement_source: "calculated" | "overridden" | "unavailable" }>;

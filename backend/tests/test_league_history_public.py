@@ -1,6 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.auth.dependencies import current_user
@@ -24,6 +25,7 @@ from app.features.league_history.models import (
 )
 from app.features.league_history.public_routes import (
     public_manager_detail,
+    public_head_to_head,
     public_overview,
     public_records,
     public_season_detail,
@@ -174,6 +176,29 @@ class LeagueHistoryPublicTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(former_detail["current_roster"])
             self.assertEqual(sleeper.calls, [("league-2025", 1)])
             self.assertEqual(former_detail["manager"]["biography"], "Original member")
+
+    async def test_head_to_head_aligns_both_sides_and_returns_every_completed_game(self):
+        async with self.sessions() as db:
+            old, _, active, former = await self._seed(db)
+            payload = await public_head_to_head(active.id, former.id, db=db)
+            comparison = payload["comparison"]
+
+            self.assertEqual(comparison["total_matchups"], 2)
+            self.assertEqual(comparison["manager_a"]["wins"], 1)
+            self.assertEqual(comparison["manager_b"]["wins"], 1)
+            self.assertEqual(comparison["manager_a"]["points_for"], 200)
+            self.assertEqual(comparison["manager_b"]["points_for"], 195)
+            self.assertEqual(comparison["games"][0]["year"], 2025)
+            self.assertEqual(comparison["games"][1]["season_id"], old.id)
+            self.assertEqual(comparison["games"][1]["team_a_name"], "Old Active")
+
+            reversed_payload = await public_head_to_head(former.id, active.id, db=db)
+            self.assertEqual(reversed_payload["comparison"]["manager_a"]["points_for"], 195)
+            self.assertEqual(reversed_payload["comparison"]["games"][1]["team_a_name"], "Pete Classic")
+
+            with self.assertRaises(HTTPException) as context:
+                await public_head_to_head(active.id, active.id, db=db)
+            self.assertEqual(context.exception.status_code, 422)
 
     async def test_season_list_and_detail_expose_provenance(self):
         async with self.sessions() as db:

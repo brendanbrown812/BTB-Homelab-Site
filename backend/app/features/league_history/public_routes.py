@@ -2,7 +2,7 @@ import uuid
 from collections import Counter
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import current_user
@@ -158,6 +158,108 @@ async def public_teams(db: AsyncSession = Depends(get_db)):
             "punishment_total": punishment_counts[manager.id],
         })
     return {"managers": items}
+
+
+@router.get("/head-to-head")
+async def public_head_to_head(
+    manager_a_id: uuid.UUID | None = None,
+    manager_b_id: uuid.UUID | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    managers = list((await db.scalars(
+        select(Manager).order_by(Manager.is_active.desc(), Manager.display_name)
+    )).all())
+    manager_options = [{
+        "id": manager.id,
+        "display_name": manager.display_name,
+        "is_active": manager.is_active,
+    } for manager in managers]
+    if manager_a_id is None and manager_b_id is None:
+        return {"managers": manager_options, "comparison": None}
+    if manager_a_id is None or manager_b_id is None:
+        raise HTTPException(status_code=422, detail="Select two managers")
+    if manager_a_id == manager_b_id:
+        raise HTTPException(status_code=422, detail="Select two different managers")
+
+    manager_by_id = {manager.id: manager for manager in managers}
+    manager_a = manager_by_id.get(manager_a_id)
+    manager_b = manager_by_id.get(manager_b_id)
+    if not manager_a or not manager_b:
+        raise HTTPException(status_code=404, detail="Manager not found")
+
+    matchups = list((await db.scalars(select(LeagueMatchup).where(or_(
+        and_(LeagueMatchup.manager_a_id == manager_a_id, LeagueMatchup.manager_b_id == manager_b_id),
+        and_(LeagueMatchup.manager_a_id == manager_b_id, LeagueMatchup.manager_b_id == manager_a_id),
+    )))).all())
+    seasons = list((await db.scalars(select(Season).where(
+        Season.id.in_({matchup.season_id for matchup in matchups})
+    ))).all()) if matchups else []
+    season_by_id = {season.id: season for season in seasons}
+
+    games = []
+    wins_a = wins_b = ties = 0
+    points_a = points_b = 0.0
+    for matchup in matchups:
+        metadata = matchup.source_metadata or {}
+        if matchup.score_a is None or matchup.score_b is None or metadata.get("is_complete") is False:
+            continue
+        season = season_by_id.get(matchup.season_id)
+        if not season:
+            continue
+        selected_a_is_stored_a = matchup.manager_a_id == manager_a_id
+        score_a = matchup.score_a if selected_a_is_stored_a else matchup.score_b
+        score_b = matchup.score_b if selected_a_is_stored_a else matchup.score_a
+        team_a_name = matchup.team_a_name if selected_a_is_stored_a else matchup.team_b_name
+        team_b_name = matchup.team_b_name if selected_a_is_stored_a else matchup.team_a_name
+        points_a += score_a
+        points_b += score_b
+        winner_id = None
+        if score_a > score_b:
+            wins_a += 1
+            winner_id = manager_a_id
+        elif score_b > score_a:
+            wins_b += 1
+            winner_id = manager_b_id
+        else:
+            ties += 1
+        games.append({
+            "id": matchup.id,
+            "season_id": season.id,
+            "year": season.year,
+            "week": matchup.week,
+            "week_end": metadata.get("week_end"),
+            "team_a_name": team_a_name,
+            "team_b_name": team_b_name,
+            "score_a": round(score_a, 2),
+            "score_b": round(score_b, 2),
+            "winner_id": winner_id,
+            "margin": round(abs(score_a - score_b), 2),
+            "source": matchup.source.value,
+        })
+    games.sort(key=lambda game: (game["year"], game["week"], game["id"]), reverse=True)
+    game_count = len(games)
+    return {
+        "managers": manager_options,
+        "comparison": {
+            "manager_a": {
+                "id": manager_a.id,
+                "display_name": manager_a.display_name,
+                "wins": wins_a,
+                "points_for": round(points_a, 2),
+                "average_score": round(points_a / game_count, 2) if game_count else 0,
+            },
+            "manager_b": {
+                "id": manager_b.id,
+                "display_name": manager_b.display_name,
+                "wins": wins_b,
+                "points_for": round(points_b, 2),
+                "average_score": round(points_b / game_count, 2) if game_count else 0,
+            },
+            "ties": ties,
+            "total_matchups": game_count,
+            "games": games,
+        },
+    }
 
 
 def _player(player: SleeperPlayer) -> dict:

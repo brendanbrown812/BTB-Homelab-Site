@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeftRight, BarChart3, BookOpenText, CalendarClock, CalendarDays, ChevronDown, ClipboardCheck, FilePenLine, History, Home, Library, ListPlus, LogOut, Menu, ShieldCheck, Sparkles, Trophy, UsersRound, Vote, X } from "lucide-react";
+import { ArrowLeftRight, BarChart3, BookOpenText, CalendarClock, CalendarDays, ChevronDown, ClipboardCheck, FilePenLine, History, Home, Library, ListPlus, LogOut, Menu, ShieldCheck, Sparkles, Swords, Trophy, UsersRound, Vote, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
@@ -22,6 +22,7 @@ const leagueItems = [
   { href: "/league", label: "Overview", icon: Home },
   { href: "/league/teams", label: "Teams", icon: UsersRound },
   { href: "/league/seasons", label: "Seasons", icon: Library },
+  { href: "/league/head-to-head", label: "Head to Head", icon: Swords },
   { href: "/league/records", label: "Records & fun facts", icon: Sparkles },
   { href: "/league/trades", label: "Trades", icon: ArrowLeftRight },
   { href: "/league/waivers", label: "Waiver wire", icon: ListPlus },
