@@ -157,6 +157,8 @@ class LeagueHistoryPublicTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(active_summary["career"]["points_for"], 200.0)
             self.assertEqual(active_summary["transaction_total"], 1)
             self.assertEqual(active_summary["punishment_total"], 1)
+            self.assertEqual(active_summary["championships"], 0)
+            self.assertEqual(active_summary["biggest_losers"], 1)
             self.assertEqual(active_summary["team_names"], ["Old Active", "Active Renamed"])
             self.assertEqual(listing["managers"][1]["championships"], 1)
 
@@ -166,6 +168,7 @@ class LeagueHistoryPublicTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(detail["current_roster"]["players"][0]["name"], "Current Player")
             self.assertEqual(detail["transactions"], {"total": 1, "by_type": {"trade": 1}})
             self.assertEqual(detail["punishments"][0]["year"], 2020)
+            self.assertEqual(detail["biggest_losers"], 1)
 
             former_detail = await public_manager_detail(former.id, db=db, sleeper=sleeper)  # type: ignore[arg-type]
             self.assertIsNone(former_detail["current_roster"])

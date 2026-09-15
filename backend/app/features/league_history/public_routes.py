@@ -121,6 +121,7 @@ async def public_teams(db: AsyncSession = Depends(get_db)):
     managers, seasons, teams, placements, matchups, punishments, participants, transactions = await _history_rows(db)
     season_by_id = {season.id: season for season in seasons}
     placement_by_key = {(item.season_id, item.manager_id): item for item in placements}
+    team_counts = Counter(team.season_id for team in teams)
     records = _records(list(matchups), {manager.id for manager in managers})
     transaction_by_id = {item.id: item for item in transactions}
     transaction_ids_by_manager: dict[uuid.UUID, set[uuid.UUID]] = {}
@@ -137,6 +138,10 @@ async def public_teams(db: AsyncSession = Depends(get_db)):
             _effective_placement(placement_by_key.get((team.season_id, manager.id)))[0] == 1
             for team in manager_teams
         )
+        biggest_losers = sum(
+            _effective_placement(placement_by_key.get((team.season_id, manager.id)))[0] == team_counts[team.season_id]
+            for team in manager_teams
+        )
         transaction_ids = transaction_ids_by_manager.get(manager.id, set())
         items.append({
             "id": manager.id,
@@ -145,6 +150,7 @@ async def public_teams(db: AsyncSession = Depends(get_db)):
             "is_active": manager.is_active,
             "seasons_played": len(manager_teams),
             "championships": championships,
+            "biggest_losers": biggest_losers,
             "team_names": list(dict.fromkeys(team.team_name for team in manager_teams)),
             "latest_team_name": manager_teams[-1].team_name if manager_teams else None,
             "career": records[manager.id],
@@ -705,6 +711,7 @@ async def public_manager_detail(
                     "error": "Current roster is temporarily unavailable.",
                 }
 
+    team_counts = Counter(team.season_id for team in teams)
     return {
         "manager": {
             "id": manager.id,
@@ -714,6 +721,9 @@ async def public_manager_detail(
         },
         "seasons": season_history,
         "championships": sum(item["placement"] == 1 for item in season_history),
+        "biggest_losers": sum(
+            item["placement"] == team_counts[item["season_id"]] for item in season_history
+        ),
         "career": _records(list(matchups), {manager.id})[manager.id],
         "transactions": {"total": len(transaction_ids), "by_type": dict(sorted(transaction_types.items()))},
         "punishments": punishment_history,

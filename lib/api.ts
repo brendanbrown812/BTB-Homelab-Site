@@ -90,11 +90,12 @@ export type LeagueHistoryAdminState = {
 };
 export type ManagerSelfProfile = { manager: { id: string; display_name: string; biography: string } | null };
 export type LeagueCareerRecord = { wins: number; losses: number; ties: number; points_for: number; points_against: number };
-export type PublicLeagueManager = { id: string; display_name: string; biography: string; is_active: boolean; seasons_played: number; championships: number; team_names: string[]; latest_team_name: string | null; career: LeagueCareerRecord; transaction_total: number; punishment_total: number };
+export type PublicLeagueManager = { id: string; display_name: string; biography: string; is_active: boolean; seasons_played: number; championships: number; biggest_losers: number; team_names: string[]; latest_team_name: string | null; career: LeagueCareerRecord; transaction_total: number; punishment_total: number };
 export type PublicManagerDetail = {
   manager: Pick<PublicLeagueManager, "id" | "display_name" | "biography" | "is_active">;
   seasons: Array<{ season_id: string; year: number; platform: "espn" | "sleeper"; team_name: string; placement: number | null; placement_source: "calculated" | "overridden" | "unavailable" }>;
   championships: number;
+  biggest_losers: number;
   career: LeagueCareerRecord;
   transactions: { total: number; by_type: Record<string, number> };
   punishments: Array<{ season_id: string; year: number; title: string }>;

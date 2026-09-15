@@ -212,7 +212,6 @@ class SleeperImporterTests(unittest.IsolatedAsyncioTestCase):
                 {"p": 5, "w": 11, "l": 12},
             ),
             total_rosters=12,
-            playoff_type=2,
         )
 
         self.assertEqual(placements[1], 1)

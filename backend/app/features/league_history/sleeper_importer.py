@@ -54,9 +54,8 @@ def _placements(
     losers_bracket: tuple[dict, ...],
     *,
     total_rosters: int,
-    playoff_type: int,
 ) -> dict[int, int]:
-    """Convert winner and consolation/toilet bracket results to overall places."""
+    """Convert the top and reverse loser brackets to unique overall places."""
     result: dict[int, int] = {}
 
     def completed_games(bracket: tuple[dict, ...]) -> list[dict]:
@@ -84,15 +83,11 @@ def _placements(
     for game in loser_games:
         bracket_place = int(game["p"])
         winner_place, loser_place = bracket_place, bracket_place + 1
-        if relative_places and playoff_type == 2:
-            # In a toilet bowl, first in the loser bracket is last overall.
+        if relative_places:
+            # BTB uses the reverse loser bracket: first in this bracket is
+            # last overall, second is second-to-last, and so on.
             winner_place = total_rosters - bracket_place + 1
             loser_place = total_rosters - bracket_place
-        elif relative_places:
-            # In a consolation bracket, first is the best non-playoff finish.
-            first_consolation_place = total_rosters - loser_team_count + 1
-            winner_place = first_consolation_place + bracket_place - 1
-            loser_place = first_consolation_place + bracket_place
         result[int(game["w"])] = winner_place
         result[int(game["l"])] = loser_place
     return result
@@ -213,20 +208,28 @@ async def import_sleeper_season(
                 # IDs and raw payloads remain fully usable if the large catalog
                 # endpoint is temporarily unavailable.
                 counts["player_lookup_failed"] = True
-        league_settings = archive.league.get("settings") or {}
+        total_rosters = int(archive.league.get("total_rosters") or len(roster_rows))
         calculated = _placements(
             archive.winners_bracket,
             archive.losers_bracket,
-            total_rosters=int(archive.league.get("total_rosters") or len(roster_rows)),
-            playoff_type=int(league_settings.get("playoff_type") or 0),
+            total_rosters=total_rosters,
         )
         league_status = str(archive.league.get("status") or "").lower()
+        placement_values = list(calculated.values())
+        expected_placements = set(range(1, total_rosters + 1))
+        placement_complete = (
+            len(calculated) == len(roster_rows) == total_rosters
+            and set(placement_values) == expected_placements
+            and len(placement_values) == len(set(placement_values))
+        )
         counts.update({
             "matchups": len(matchup_pairs),
             "transactions": len(transactions),
             "players": len(player_ids),
             "calculated_placements": len(calculated),
-            "placement_complete": len(calculated) == len(roster_rows),
+            "placement_complete": placement_complete,
+            "missing_placements": sorted(expected_placements - set(placement_values)),
+            "duplicate_placements": sorted({place for place in placement_values if placement_values.count(place) > 1}),
         })
 
         if not roster_rows:
@@ -239,6 +242,12 @@ async def import_sleeper_season(
             await _finish_run(
                 db, run_id, ImportRunStatus.needs_attention, counts,
                 "Sleeper returned no paired matchups for this completed season",
+            )
+            return {"run_id": run_id, "status": ImportRunStatus.needs_attention.value, "counts": counts}
+        if league_status in {"complete", "completed"} and not placement_complete:
+            await _finish_run(
+                db, run_id, ImportRunStatus.needs_attention, counts,
+                "Sleeper brackets did not resolve to one unique placement per manager",
             )
             return {"run_id": run_id, "status": ImportRunStatus.needs_attention.value, "counts": counts}
 
