@@ -255,7 +255,16 @@ class LeagueHistoryPublicTests(unittest.IsolatedAsyncioTestCase):
                 occurred_at=datetime(2025, 9, 20, tzinfo=timezone.utc),
                 raw_payload={"type": "trade"},
             )
-            db.add(trade)
+            failed_trade = LeagueTransaction(
+                season_id=current.id,
+                external_id="failed-trade",
+                week=4,
+                transaction_type="trade",
+                status="failed",
+                occurred_at=datetime(2025, 9, 19, tzinfo=timezone.utc),
+                raw_payload={"type": "trade"},
+            )
+            db.add_all([trade, failed_trade])
             await db.flush()
             db.add_all([
                 LeagueTransactionParticipant(transaction_id=trade.id, manager_id=active.id, roster_id=1),
@@ -266,6 +275,8 @@ class LeagueHistoryPublicTests(unittest.IsolatedAsyncioTestCase):
                 LeagueTransactionPlayer(transaction_id=trade.id, manager_id=third.id, roster_id=3, player_id="303", player_name="Gamma Tight End", movement=TransactionMovement.add),
                 LeagueTransactionDraftPick(transaction_id=trade.id, pick_season=2026, round=2, original_roster_id=2, previous_owner_roster_id=2, new_owner_roster_id=1),
                 LeagueTransactionFaab(transaction_id=trade.id, sender_roster_id=3, receiver_roster_id=1, amount=12),
+                LeagueTransactionParticipant(transaction_id=failed_trade.id, manager_id=active.id, roster_id=1),
+                LeagueTransactionParticipant(transaction_id=failed_trade.id, manager_id=former.id, roster_id=2),
             ])
             await db.commit()
 
@@ -281,6 +292,13 @@ class LeagueHistoryPublicTests(unittest.IsolatedAsyncioTestCase):
             gamma = next(player for player in item["adds"] if player["player_id"] == "303")
             self.assertEqual(gamma["name"], "Gamma Tight End")
             self.assertEqual(gamma["image_url"], "https://images.test/303.jpg")
+
+            completed = await public_trades(
+                season=2025, manager_id=None, player=None, status="complete", db=db, sleeper=service  # type: ignore[arg-type]
+            )
+            self.assertIn("multi-trade", {row["external_id"] for row in completed["items"]})
+            self.assertNotIn("failed-trade", {row["external_id"] for row in completed["items"]})
+            self.assertTrue(all(row["status"] == "complete" for row in completed["items"]))
 
             no_match = await public_trades(
                 season=2020, manager_id=None, player=None, db=db, sleeper=service  # type: ignore[arg-type]

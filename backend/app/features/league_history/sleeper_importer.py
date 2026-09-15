@@ -49,16 +49,52 @@ def _roster_references(payload: dict) -> set[int]:
     return result
 
 
-def _placements(*brackets: tuple[dict, ...]) -> dict[int, int]:
-    """Sleeper's `p` is the winner's final place; the loser is the next place."""
+def _placements(
+    winners_bracket: tuple[dict, ...],
+    losers_bracket: tuple[dict, ...],
+    *,
+    total_rosters: int,
+    playoff_type: int,
+) -> dict[int, int]:
+    """Convert winner and consolation/toilet bracket results to overall places."""
     result: dict[int, int] = {}
-    for bracket in brackets:
-        for game in bracket:
-            if game.get("p") is None or game.get("w") is None or game.get("l") is None:
-                continue
-            place = int(game["p"])
-            result[int(game["w"])] = place
-            result[int(game["l"])] = place + 1
+
+    def completed_games(bracket: tuple[dict, ...]) -> list[dict]:
+        return [
+            game for game in bracket
+            if game.get("p") is not None and game.get("w") is not None and game.get("l") is not None
+        ]
+
+    for game in completed_games(winners_bracket):
+        place = int(game["p"])
+        result[int(game["w"])] = place
+        result[int(game["l"])] = place + 1
+
+    loser_games = completed_games(losers_bracket)
+    loser_rosters = {
+        int(value)
+        for game in losers_bracket
+        for key in ("t1", "t2", "w", "l")
+        for value in (game.get(key),)
+        if isinstance(value, int) and value > 0
+    }
+    loser_team_count = len(loser_rosters)
+    relative_places = bool(loser_games) and loser_team_count > 0 and max(int(game["p"]) for game in loser_games) <= loser_team_count
+
+    for game in loser_games:
+        bracket_place = int(game["p"])
+        winner_place, loser_place = bracket_place, bracket_place + 1
+        if relative_places and playoff_type == 2:
+            # In a toilet bowl, first in the loser bracket is last overall.
+            winner_place = total_rosters - bracket_place + 1
+            loser_place = total_rosters - bracket_place
+        elif relative_places:
+            # In a consolation bracket, first is the best non-playoff finish.
+            first_consolation_place = total_rosters - loser_team_count + 1
+            winner_place = first_consolation_place + bracket_place - 1
+            loser_place = first_consolation_place + bracket_place
+        result[int(game["w"])] = winner_place
+        result[int(game["l"])] = loser_place
     return result
 
 
@@ -177,7 +213,13 @@ async def import_sleeper_season(
                 # IDs and raw payloads remain fully usable if the large catalog
                 # endpoint is temporarily unavailable.
                 counts["player_lookup_failed"] = True
-        calculated = _placements(archive.winners_bracket, archive.losers_bracket)
+        league_settings = archive.league.get("settings") or {}
+        calculated = _placements(
+            archive.winners_bracket,
+            archive.losers_bracket,
+            total_rosters=int(archive.league.get("total_rosters") or len(roster_rows)),
+            playoff_type=int(league_settings.get("playoff_type") or 0),
+        )
         league_status = str(archive.league.get("status") or "").lower()
         counts.update({
             "matchups": len(matchup_pairs),

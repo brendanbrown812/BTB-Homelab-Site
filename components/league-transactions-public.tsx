@@ -11,6 +11,7 @@ import { apiFetch, PublicLeagueTransaction, PublicTransactionPlayer, PublicTrans
 
 type Filters = { season: string; manager: string; player: string; transactionType: string; status: string };
 const emptyFilters: Filters = { season: "", manager: "", player: "", transactionType: "", status: "" };
+const completedTradeFilters: Filters = { ...emptyFilters, status: "complete" };
 
 function useTransactions(path: string, filters: Filters) {
   const query = useMemo(() => {
@@ -38,7 +39,7 @@ function useTransactions(path: string, filters: Filters) {
 }
 
 export function LeagueTradesPage() {
-  const [filters, setFilters] = useState(emptyFilters);
+  const [filters, setFilters] = useState(completedTradeFilters);
   const { data, error } = useTransactions("/league-history/trades", filters);
   const years = data ? Array.from(new Set(data.items.map(item => item.season))).sort((a, b) => b - a) : [];
   return <>
@@ -63,14 +64,16 @@ export function LeagueWaiversPage() {
 function TransactionFilters({ filters, setFilters, options, mode }: { filters: Filters; setFilters: (value: Filters) => void; options?: PublicTransactionResponse["options"]; mode: "trades" | "waivers" }) {
   const [player, setPlayer] = useState(filters.player);
   function submit(event: FormEvent) { event.preventDefault(); setFilters({ ...filters, player: player.trim() }); }
-  function reset() { setPlayer(""); setFilters(emptyFilters); }
-  const active = Object.values(filters).some(Boolean);
+  function reset() { setPlayer(""); setFilters(mode === "trades" ? completedTradeFilters : emptyFilters); }
+  const defaults = mode === "trades" ? completedTradeFilters : emptyFilters;
+  const active = (Object.keys(filters) as Array<keyof Filters>).some(key => filters[key] !== defaults[key]);
   return <form onSubmit={submit} className="mb-7 rounded-2xl border border-white/8 bg-card p-4 sm:p-5">
-    <div className={`grid gap-3 ${mode === "waivers" ? "md:grid-cols-2 xl:grid-cols-5" : "md:grid-cols-3"}`}>
+    <div className={`grid gap-3 ${mode === "waivers" ? "md:grid-cols-2 xl:grid-cols-5" : "md:grid-cols-2 xl:grid-cols-4"}`}>
       <FilterSelect label="Season" value={filters.season} onChange={value => setFilters({ ...filters, season: value })}><option value="">All seasons</option>{options?.seasons.map(year => <option key={year} value={year}>{year}</option>)}</FilterSelect>
       <FilterSelect label="Manager" value={filters.manager} onChange={value => setFilters({ ...filters, manager: value })}><option value="">All managers</option>{options?.managers.map(manager => <option key={manager.id} value={manager.id}>{manager.display_name}</option>)}</FilterSelect>
       <label className="block"><span className="mb-1.5 block text-xs font-bold uppercase tracking-[.1em] text-slate-500">Player</span><span className="flex rounded-xl border border-white/10 bg-[#0d131e] focus-within:border-primary/50"><input value={player} onChange={event => setPlayer(event.target.value)} placeholder="Name or player ID" className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm outline-none placeholder:text-slate-600" /><button title="Apply player filter" aria-label="Apply player filter" className="px-3 text-slate-500 hover:text-primary"><Search className="h-4 w-4" /></button></span></label>
-      {mode === "waivers" && <><FilterSelect label="Activity" value={filters.transactionType} onChange={value => setFilters({ ...filters, transactionType: value })}><option value="">All activity</option>{options?.transaction_types.map(value => <option key={value} value={value}>{labelType(value)}</option>)}</FilterSelect><FilterSelect label="Status" value={filters.status} onChange={value => setFilters({ ...filters, status: value })}><option value="">All statuses</option>{options?.statuses.map(value => <option key={value} value={value}>{titleCase(value)}</option>)}</FilterSelect></>}
+      {mode === "waivers" && <FilterSelect label="Activity" value={filters.transactionType} onChange={value => setFilters({ ...filters, transactionType: value })}><option value="">All activity</option>{options?.transaction_types.map(value => <option key={value} value={value}>{labelType(value)}</option>)}</FilterSelect>}
+      <FilterSelect label="Status" value={filters.status} onChange={value => setFilters({ ...filters, status: value })}><option value="">All statuses</option>{options?.statuses.map(value => <option key={value} value={value}>{titleCase(value)}</option>)}</FilterSelect>
     </div>
     {active && <button type="button" onClick={reset} className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-white"><RefreshCcw className="h-3.5 w-3.5" />Clear filters</button>}
   </form>;

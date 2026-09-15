@@ -22,7 +22,7 @@ from app.features.league_history.models import (
     WeeklyHighlight,
     WeeklyHighlightSource,
 )
-from app.features.league_history.sleeper_importer import import_sleeper_season
+from app.features.league_history.sleeper_importer import _placements, import_sleeper_season
 from app.models.season import Season, SeasonPlatform
 from app.models.user import User  # noqa: F401 - registers the referenced table
 from app.services.sleeper import SleeperLeagueArchive, SleeperPlayer
@@ -199,6 +199,28 @@ class SleeperImporterTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await db.scalar(select(func.count()).select_from(SeasonTeam)), 0)
             run = await db.get(ImportRun, result["run_id"])
             self.assertIn("no paired matchups", run.error_details)
+
+    def test_toilet_bowl_places_are_reversed_into_overall_league_places(self):
+        placements = _placements(
+            ({"p": 1, "w": 1, "l": 2}, {"p": 3, "w": 3, "l": 4}),
+            (
+                {"t1": 7, "t2": 8, "w": 7, "l": 8},
+                {"t1": 9, "t2": 10, "w": 9, "l": 10},
+                {"t1": 11, "t2": 12, "w": 11, "l": 12},
+                {"p": 1, "w": 7, "l": 8},
+                {"p": 3, "w": 9, "l": 10},
+                {"p": 5, "w": 11, "l": 12},
+            ),
+            total_rosters=12,
+            playoff_type=2,
+        )
+
+        self.assertEqual(placements[1], 1)
+        self.assertEqual(placements[2], 2)
+        self.assertEqual(placements[7], 12)
+        self.assertEqual(placements[8], 11)
+        self.assertEqual(placements[9], 10)
+        self.assertEqual(placements[10], 9)
 
 
 if __name__ == "__main__":

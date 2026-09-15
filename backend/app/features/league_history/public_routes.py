@@ -350,11 +350,13 @@ async def public_trades(
     season: int | None = Query(default=None, ge=2020),
     manager_id: uuid.UUID | None = None,
     player: str | None = Query(default=None, max_length=160),
+    status: str | None = None,
     db: AsyncSession = Depends(get_db),
     sleeper: SleeperService = Depends(get_public_sleeper_service),
 ):
     return await _transaction_rows(
-        db, sleeper, transaction_types={"trade"}, season=season, manager_id=manager_id, player=player
+        db, sleeper, transaction_types={"trade"}, season=season, manager_id=manager_id, player=player,
+        status=status,
     )
 
 
