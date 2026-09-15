@@ -212,7 +212,11 @@ class SleeperService:
         def lineup(row: dict) -> tuple[tuple[SleeperPlayer, ...], tuple[SleeperPlayer, ...]]:
             if not include_players:
                 return (), ()
-            starter_ids = [str(value) for value in row.get("starters") or [] if value and str(value) != "0"]
+            raw_starters = row.get("starters")
+            if raw_starters is None:
+                roster = roster_by_id.get(int(row.get("roster_id", -1)), {})
+                raw_starters = roster.get("starters")
+            starter_ids = [str(value) for value in raw_starters or [] if value and str(value) != "0"]
             starter_set = set(starter_ids)
             all_ids = [str(value) for value in row.get("players") or [] if value and str(value) != "0"]
             points = row.get("players_points") or {}

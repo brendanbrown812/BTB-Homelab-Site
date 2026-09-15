@@ -16,8 +16,8 @@ class FakeSleeperClient:
 
     async def rosters(self, _league_id: str):
         return [
-            {"roster_id": 1, "owner_id": "owner1", "settings": {"wins": 2, "losses": 1}},
-            {"roster_id": 2, "owner_id": "owner2", "settings": {"wins": 1, "losses": 2}},
+            {"roster_id": 1, "owner_id": "owner1", "starters": ["101", "AAA"], "settings": {"wins": 2, "losses": 1}},
+            {"roster_id": 2, "owner_id": "owner2", "starters": ["202"], "settings": {"wins": 1, "losses": 2}},
         ]
 
     async def users(self, _league_id: str):
@@ -54,6 +54,51 @@ class SleeperRosterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([player.name for player in first.team_a_bench], ["Runner One"])
         self.assertEqual(first.team_a_bench[0].injury_status, "Q")
         self.assertEqual(first.team_a_avatar_url, "https://sleepercdn.com/avatars/thumbs/avatar-one")
+
+    async def test_missing_matchup_starters_fall_back_to_roster_starters(self):
+        class MissingStartersClient(FakeSleeperClient):
+            async def matchups(self, _league_id: str, _week: int):
+                return [
+                    {
+                        "matchup_id": 1,
+                        "roster_id": 1,
+                        "points": 10,
+                        "players": ["101", "303"],
+                        "players_points": {"101": 10, "303": 0},
+                    },
+                    {
+                        "matchup_id": 1,
+                        "roster_id": 2,
+                        "points": 0,
+                        "starters": [],
+                        "players": ["202"],
+                        "players_points": {"202": 0},
+                    },
+                ]
+
+        sleeper_module._player_cache = None
+        sleeper_module._player_cache_expires_at = 0
+        matchup = (
+            await SleeperService(MissingStartersClient()).weekly_matchups(
+                "league",
+                2,
+                include_players=True,
+            )
+        )[0]
+
+        self.assertEqual(
+            [player.player_id for player in matchup.team_a_starters],
+            ["101", "AAA"],
+        )
+        self.assertEqual(
+            [player.player_id for player in matchup.team_a_bench],
+            ["303"],
+        )
+        self.assertEqual(matchup.team_b_starters, ())
+        self.assertEqual(
+            [player.player_id for player in matchup.team_b_bench],
+            ["202"],
+        )
 
     async def test_archive_uses_shared_client_for_all_history_endpoints(self):
         class ArchiveClient:
