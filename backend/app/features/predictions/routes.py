@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import current_user
 from app.database.session import get_db
 from app.features.predictions.models import Prediction, PredictionMatchup, PredictionWeek, WeekStatus
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.season import Season
 from app.services.sleeper import SleeperMatchup, SleeperPlayer, SleeperService
 
@@ -155,6 +155,16 @@ async def save_picks(week_id: uuid.UUID, body: PickCard, user: User = Depends(cu
 
 @router.get("/seasons/{season_id}/standings")
 async def season_standings(season_id: uuid.UUID, _: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    participating_users = (
+        select(Prediction.user_id)
+        .join(PredictionMatchup, PredictionMatchup.id == Prediction.matchup_id)
+        .join(PredictionWeek, PredictionWeek.id == PredictionMatchup.week_id)
+        .where(
+            PredictionWeek.season_id == season_id,
+            Prediction.selected_roster_id.is_not(None),
+        )
+        .distinct()
+    )
     query = (select(User.id, User.display_name,
         func.count(case((Prediction.result == "win", 1))).label("wins"),
         func.count(case((Prediction.result == "loss", 1))).label("losses"),
@@ -162,7 +172,12 @@ async def season_standings(season_id: uuid.UUID, _: User = Depends(current_user)
         .join(Prediction, Prediction.user_id == User.id)
         .join(PredictionMatchup, PredictionMatchup.id == Prediction.matchup_id)
         .join(PredictionWeek, PredictionWeek.id == PredictionMatchup.week_id)
-        .where(PredictionWeek.season_id == season_id, PredictionWeek.status == WeekStatus.final)
+        .where(
+            PredictionWeek.season_id == season_id,
+            PredictionWeek.status == WeekStatus.final,
+            User.role == UserRole.user,
+            User.id.in_(participating_users),
+        )
         .group_by(User.id).order_by(func.count(case((Prediction.result == "win", 1))).desc()))
     rows = (await db.execute(query)).all()
     return [{"user_id": r.id, "display_name": r.display_name, "wins": r.wins, "losses": r.losses, "pushes": r.pushes} for r in rows]
