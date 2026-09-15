@@ -127,15 +127,18 @@ if not exist "node_modules\.bin\vinext.cmd" (
 echo Starting BTB backend at http://localhost:8000 ...
 start "BTB Backend" /D "%BTB_ROOT%\backend" cmd /k "node ..\scripts\run-with-log.mjs ..\logs\backend.log .btb-venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000"
 
+echo Starting BTB task scheduler...
+start "BTB Scheduler" /D "%BTB_ROOT%\backend" cmd /k "node ..\scripts\run-with-log.mjs ..\logs\scheduler.log .btb-venv\Scripts\python.exe -m app.tasks.worker"
+
 echo Starting BTB frontend...
 start "BTB Frontend" /D "%BTB_ROOT%" cmd /k "node scripts\run-with-log.mjs logs\frontend.log node scripts\run-framework.mjs dev"
 
 echo.
-echo Both services are starting in separate windows.
+echo All services are starting in separate windows.
 echo Frontend: http://localhost:5173
 echo API docs: http://localhost:8000/docs
 echo Logs: %BTB_ROOT%\logs
-echo Close those two command windows to stop BTB.
+echo Close those three command windows to stop BTB.
 echo.
 timeout /t 3 >nul
 start "" "http://localhost:5173/login"

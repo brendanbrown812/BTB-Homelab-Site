@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     notion_game_history_data_source_id: str = ""
     notion_game_history_database_id: str = ""
     notion_timeout_seconds: float = 20.0
+    task_poll_seconds: int = 30
+    task_lease_seconds: int = 15 * 60
+    task_retry_minutes: int = 15
     season_year: int = 2026
     bootstrap_admin_username: str = "admin"
     bootstrap_admin_display_name: str = "Bootstrap Admin"

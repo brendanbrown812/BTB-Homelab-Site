@@ -15,6 +15,8 @@ from app.features.league_history import models as league_history_models  # noqa:
 from app.features.league_history.routes import admin_router as admin_league_history_router
 from app.features.league_history.routes import router as league_history_router
 from app.features.league_history.public_routes import router as public_league_history_router
+from app.tasks import models as task_models  # noqa: F401
+from app.tasks.routes import router as admin_tasks_router
 from app.models.season import Season
 from app.models.user import User, UserRole
 from app.core.security import hash_password, verify_password
@@ -156,6 +158,7 @@ app.include_router(polls_router, prefix="/api")
 app.include_router(admin_league_history_router, prefix="/api")
 app.include_router(league_history_router, prefix="/api")
 app.include_router(public_league_history_router, prefix="/api")
+app.include_router(admin_tasks_router, prefix="/api")
 
 
 @app.get("/api/health")

@@ -13,6 +13,8 @@ BTB is a private, homelab-friendly website for one fantasy football league. It c
 - Automatic win/loss/push scoring; blank picks score as losses
 - Weekly records, standings, history, and champions
 - Admin refresh, finalize, and recalculate endpoints
+- Database-backed recurring tasks with execution history and safe retry leases
+- Automatic prediction-week refresh and finalization every Tuesday at 7:00 AM Central
 - PostgreSQL persistence, Alembic migrations, and Docker Compose
 - Permanent manager profiles that survive team-name changes and do not require BTB login accounts
 - ESPN-era matchup history for 2020–2021 through a one-time Notion import
@@ -32,6 +34,7 @@ backend/app/services/sleeper/     reusable Sleeper adapter
 backend/app/services/notion/      read-only one-time Notion adapter
 backend/app/features/predictions/ prediction API, models and scoring
 backend/app/features/league_history/ league archive, imports and statistics
+backend/app/tasks/                recurring-task registry, runner, and worker
 backend/alembic/                  database migrations
 ```
 
@@ -47,7 +50,7 @@ Sleeper is the live source for current fantasy data and the import source for Sl
 6. In **Admin → BTB accounts**, create your permanent admin account, copy its generated password, and sign in with it.
 7. Clear `BOOTSTRAP_ADMIN_PASSWORD` in `.env` and restart the API. This disables the environment bootstrap account.
 
-The API applies migrations at startup. PostgreSQL data lives in the `btb_postgres` volume.
+The API applies migrations at startup. PostgreSQL data lives in the `btb_postgres` volume. After the API is healthy, the dedicated `scheduler` service starts and registers recurring tasks. Prediction weeks are refreshed and finalized every Tuesday at 7:00 AM in `America/Chicago`, including daylight-saving-time changes. Failed runs are recorded and retried after `TASK_RETRY_MINUTES`; the existing commissioner buttons remain available as manual fallbacks.
 
 ## Local development
 
@@ -56,14 +59,14 @@ On Windows, double-click `run-local.bat`. The first run creates or updates `.env
 - create a private Python environment;
 - install missing backend and frontend packages;
 - use a local SQLite database, so PostgreSQL and Docker are not required;
-- start the API and frontend in separate command windows; and
+- start the API, frontend, and recurring-task scheduler in separate command windows; and
 - open the site at `http://localhost:5173`.
 
 Sign in with username `admin` and the `BOOTSTRAP_ADMIN_PASSWORD` value. Create your permanent account in **Admin → BTB accounts**, copy its generated password, then clear the bootstrap password and restart BTB.
 
-To stop the local site, close the **BTB Backend** and **BTB Frontend** command windows.
+To stop the local site, close the **BTB Backend**, **BTB Scheduler**, and **BTB Frontend** command windows.
 
-Every local session is also written to `logs/backend.log` and
+Every local session is also written to `logs/backend.log`, `logs/scheduler.log`, and
 `logs/frontend.log`. These files are excluded from Git and retain the console
 output needed to diagnose a failure later.
 

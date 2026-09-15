@@ -10,6 +10,7 @@ from app.features.predictions.models import Prediction, PredictionMatchup, Predi
 from app.features.ptgotw.models import PTGWriteup  # noqa: F401
 from app.features.polls.models import Poll, PollOption, PollVote  # noqa: F401
 from app.features.league_history import models as league_history_models  # noqa: F401
+from app.tasks import models as task_models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)

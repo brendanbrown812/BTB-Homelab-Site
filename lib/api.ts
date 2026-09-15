@@ -16,6 +16,18 @@ export type CurrentSubmissionStatus = {
   total_matchups: number;
   users: Array<{ user_id: string; display_name: string; submitted_picks: number }>;
 };
+export type ScheduledTaskState = {
+  key: string;
+  description: string;
+  schedule: string;
+  enabled: boolean;
+  next_run_at: string;
+  last_started_at: string | null;
+  last_finished_at: string | null;
+  last_status: "running" | "succeeded" | "failed" | "skipped" | null;
+  consecutive_failures: number;
+  last_error: string | null;
+};
 export type PTGWriteup = {
   id: string;
   year: number;
