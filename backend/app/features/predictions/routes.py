@@ -188,9 +188,22 @@ async def prediction_history(season_id: uuid.UUID, _: User = Depends(current_use
     weeks = (await db.scalars(select(PredictionWeek).where(PredictionWeek.season_id == season_id, PredictionWeek.status == WeekStatus.final).order_by(PredictionWeek.week_number.desc()))).all()
     history = []
     for week in weeks:
+        participating_users = (
+            select(Prediction.user_id)
+            .join(PredictionMatchup, PredictionMatchup.id == Prediction.matchup_id)
+            .where(
+                PredictionMatchup.week_id == week.id,
+                Prediction.selected_roster_id.is_not(None),
+            )
+            .distinct()
+        )
         query = (select(User.display_name, func.count(case((Prediction.result == "win", 1))).label("wins"), func.count(case((Prediction.result == "loss", 1))).label("losses"), func.count(case((Prediction.result == "push", 1))).label("pushes"))
             .join(Prediction, Prediction.user_id == User.id).join(PredictionMatchup, PredictionMatchup.id == Prediction.matchup_id)
-            .where(PredictionMatchup.week_id == week.id).group_by(User.id).order_by(func.count(case((Prediction.result == "win", 1))).desc()))
+            .where(
+                PredictionMatchup.week_id == week.id,
+                User.role == UserRole.user,
+                User.id.in_(participating_users),
+            ).group_by(User.id).order_by(func.count(case((Prediction.result == "win", 1))).desc()))
         records = (await db.execute(query)).all()
         high = records[0].wins if records else 0
         history.append({"week": week.week_number, "finalized_at": week.finalized_at, "champions": [r.display_name for r in records if r.wins == high], "records": [{"name": r.display_name, "wins": r.wins, "losses": r.losses, "pushes": r.pushes} for r in records]})

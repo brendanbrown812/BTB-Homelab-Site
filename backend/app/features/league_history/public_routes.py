@@ -79,7 +79,12 @@ def _records(matchups: list[LeagueMatchup], manager_ids: set[uuid.UUID]) -> dict
         for manager_id in manager_ids
     }
     for matchup in matchups:
-        if matchup.score_a is None or matchup.score_b is None:
+        metadata = matchup.source_metadata or {}
+        if (
+            matchup.score_a is None
+            or matchup.score_b is None
+            or metadata.get("is_complete") is False
+        ):
             continue
         for manager_id in (matchup.manager_a_id, matchup.manager_b_id):
             result.setdefault(manager_id, {"wins": 0, "losses": 0, "ties": 0, "points_for": 0.0, "points_against": 0.0})
@@ -943,7 +948,7 @@ async def public_season_detail(
             "score_a": matchup.score_a,
             "score_b": matchup.score_b,
             "source": matchup.source.value,
-        } for matchup in matchups],
+        } for matchup in matchups if (matchup.source_metadata or {}).get("is_complete") is not False],
         "awards": [{
             "id": item.source_key or f"{item.week}:{item.category}:{item.manager_id or item.player_id or 'game'}",
             "week": item.week,

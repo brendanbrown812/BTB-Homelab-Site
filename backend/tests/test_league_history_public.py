@@ -218,6 +218,39 @@ class LeagueHistoryPublicTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(detail["punishment"]["manager_id"], active.id)
             self.assertEqual(detail["standings"][1]["wins"], 1)
 
+    async def test_current_season_ignores_unplayed_future_matchups(self):
+        async with self.sessions() as db:
+            _, current, active, former = await self._seed(db)
+            db.add(LeagueMatchup(
+                season_id=current.id,
+                week=2,
+                manager_a_id=active.id,
+                manager_b_id=former.id,
+                team_a_name="Active Renamed",
+                team_b_name="Pete Classic",
+                score_a=0,
+                score_b=0,
+                source=HistorySource.sleeper,
+                source_key="future-game",
+                source_metadata={"is_complete": False},
+            ))
+            await db.commit()
+
+            detail = await public_season_detail(current.id, db=db)
+
+        self.assertEqual(len(detail["standings"]), 1)
+        self.assertEqual(
+            {
+                "wins": detail["standings"][0]["wins"],
+                "losses": detail["standings"][0]["losses"],
+                "ties": detail["standings"][0]["ties"],
+                "points_for": detail["standings"][0]["points_for"],
+                "points_against": detail["standings"][0]["points_against"],
+            },
+            {"wins": 0, "losses": 1, "ties": 0, "points_for": 90.0, "points_against": 95.0},
+        )
+        self.assertEqual([row["week"] for row in detail["weekly_results"]], [1])
+
     async def test_records_api_shapes_ties_and_links_from_history_only(self):
         async with self.sessions() as db:
             await self._seed(db)

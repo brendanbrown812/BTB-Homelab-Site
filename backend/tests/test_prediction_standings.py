@@ -11,7 +11,7 @@ from app.features.predictions.models import (
     PredictionWeek,
     WeekStatus,
 )
-from app.features.predictions.routes import season_standings
+from app.features.predictions.routes import prediction_history, season_standings
 from app.models.season import Season
 from app.models.user import User, UserRole
 
@@ -167,6 +167,84 @@ class PredictionStandingsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["display_name"], "Member")
         self.assertEqual((result[0]["wins"], result[0]["losses"]), (1, 1))
+
+    async def test_history_counts_only_members_who_participated_that_week(self):
+        async with self.sessions() as db:
+            season = Season(year=2026, sleeper_league_id="league", is_active=True)
+            admin = User(
+                username="admin",
+                display_name="Admin",
+                role=UserRole.admin,
+                is_active=True,
+            )
+            participant = User(
+                username="participant",
+                display_name="Participant",
+                role=UserRole.user,
+                is_active=True,
+            )
+            nonparticipant = User(
+                username="nonparticipant",
+                display_name="Nonparticipant",
+                role=UserRole.user,
+                is_active=True,
+            )
+            db.add_all([season, admin, participant, nonparticipant])
+            await db.flush()
+
+            week = PredictionWeek(
+                season_id=season.id,
+                week_number=1,
+                lock_at=datetime(2026, 9, 10, tzinfo=timezone.utc),
+                status=WeekStatus.final,
+                finalized_at=datetime(2026, 9, 15, tzinfo=timezone.utc),
+            )
+            db.add(week)
+            await db.flush()
+            matchups = [
+                PredictionMatchup(
+                    week_id=week.id,
+                    sleeper_matchup_id=number,
+                    team_a_roster_id=number * 2 - 1,
+                    team_b_roster_id=number * 2,
+                    team_a_name="A",
+                    team_b_name="B",
+                )
+                for number in (1, 2)
+            ]
+            db.add_all(matchups)
+            await db.flush()
+            for user, selections, results in (
+                (admin, (1, 3), (PickResult.win, PickResult.win)),
+                (participant, (1, None), (PickResult.win, PickResult.loss)),
+                (nonparticipant, (None, None), (PickResult.loss, PickResult.loss)),
+            ):
+                db.add_all(
+                    Prediction(
+                        user_id=user.id,
+                        matchup_id=matchup.id,
+                        selected_roster_id=selection,
+                        result=result,
+                    )
+                    for matchup, selection, result in zip(matchups, selections, results)
+                )
+            await db.commit()
+
+            result = await prediction_history(season.id, participant, db)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["champions"], ["Participant"])
+        self.assertEqual(
+            result[0]["records"],
+            [
+                {
+                    "name": "Participant",
+                    "wins": 1,
+                    "losses": 1,
+                    "pushes": 0,
+                }
+            ],
+        )
 
 
 if __name__ == "__main__":
