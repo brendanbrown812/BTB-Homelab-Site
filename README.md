@@ -54,7 +54,7 @@ The API applies migrations at startup. PostgreSQL data lives in the `btb_postgre
 
 ## Local development
 
-On Windows, double-click `run-local.bat`. The first run creates or updates `.env` and opens it for you. Add your Sleeper league ID, replace the example secret, and set a temporary bootstrap admin password. Save, then run the launcher again. It will:
+On Windows, double-click `run-local.bat`. The first run creates or updates `.env` and opens it for you. Add your Sleeper league ID, replace the example secret, and set a temporary bootstrap admin password. Save, then run the launcher again. The local backend uses port **8001** to avoid conflicts with other APIs on port 8000; the launcher sets the frontend API URL to match. To choose another port, set `BTB_BACKEND_PORT` in your environment before launching. It will:
 
 - create a private Python environment;
 - install missing backend and frontend packages;

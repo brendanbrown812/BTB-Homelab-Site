@@ -70,6 +70,9 @@ if errorlevel 1 (
 rem Local development always uses SQLite, even if .env contains server settings.
 set "DATABASE_URL=sqlite+aiosqlite:///./btb-local.db"
 set "LOCAL_CREATE_SCHEMA=true"
+rem Keep BTB separate from other local APIs using port 8000.
+if not defined BTB_BACKEND_PORT set "BTB_BACKEND_PORT=8001"
+set "NEXT_PUBLIC_API_URL=http://localhost:%BTB_BACKEND_PORT%/api"
 
 where py >nul 2>nul
 if not errorlevel 1 (
@@ -124,8 +127,8 @@ if not exist "node_modules\.bin\vinext.cmd" (
   if errorlevel 1 goto :failed
 )
 
-echo Starting BTB backend at http://localhost:8000 ...
-start "BTB Backend" /D "%BTB_ROOT%\backend" cmd /k "node ..\scripts\run-with-log.mjs ..\logs\backend.log .btb-venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000"
+echo Starting BTB backend at http://localhost:%BTB_BACKEND_PORT% ...
+start "BTB Backend" /D "%BTB_ROOT%\backend" cmd /k "node ..\scripts\run-with-log.mjs ..\logs\backend.log .btb-venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port %BTB_BACKEND_PORT%"
 
 echo Starting BTB task scheduler...
 start "BTB Scheduler" /D "%BTB_ROOT%\backend" cmd /k "node ..\scripts\run-with-log.mjs ..\logs\scheduler.log .btb-venv\Scripts\python.exe -m app.tasks.worker"
@@ -136,7 +139,7 @@ start "BTB Frontend" /D "%BTB_ROOT%" cmd /k "node scripts\run-with-log.mjs logs\
 echo.
 echo All services are starting in separate windows.
 echo Frontend: http://localhost:5173
-echo API docs: http://localhost:8000/docs
+echo API docs: http://localhost:%BTB_BACKEND_PORT%/docs
 echo Logs: %BTB_ROOT%\logs
 echo Close those three command windows to stop BTB.
 echo.

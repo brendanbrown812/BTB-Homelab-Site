@@ -81,6 +81,11 @@ async def _sync_current(db: AsyncSession, include_rosters: bool = False) -> tupl
 @router.get("/current")
 async def current_week(include_rosters: bool = False, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
     season, week, live_matchups = await _sync_current(db, include_rosters)
+    return await _week_payload(db, user, season, week, live_matchups, include_rosters)
+
+
+async def _week_payload(db: AsyncSession, user: User, season: Season, week: PredictionWeek,
+                        live_matchups: list[SleeperMatchup], include_rosters: bool = False):
     matchups = (await db.scalars(select(PredictionMatchup).where(PredictionMatchup.week_id == week.id).order_by(PredictionMatchup.sleeper_matchup_id))).all()
     picks_query = select(Prediction).where(Prediction.matchup_id.in_([m.id for m in matchups]))
     public = datetime.now(timezone.utc) >= _utc(week.lock_at)
@@ -123,6 +128,23 @@ async def current_week(include_rosters: bool = False, user: User = Depends(curre
         "matchups": [{"id": m.id, "sleeper_matchup_id": m.sleeper_matchup_id, "team_a": team_payload(m, "a"), "team_b": team_payload(m, "b"), "winner_roster_id": m.winner_roster_id} for m in matchups],
         "picks": [{"user_id": p.user_id, "matchup_id": p.matchup_id, "selected_roster_id": p.selected_roster_id, "result": p.result.value if p.result else None} for p in picks],
     }
+
+
+@router.get("/seasons/{season_id}/weeks")
+async def season_weeks(season_id: uuid.UUID, _: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    weeks = (await db.scalars(select(PredictionWeek).where(
+        PredictionWeek.season_id == season_id,
+    ).order_by(PredictionWeek.week_number.desc()))).all()
+    return [{"id": week.id, "number": week.week_number, "status": week.status.value} for week in weeks]
+
+
+@router.get("/weeks/{week_id}/results")
+async def week_results(week_id: uuid.UUID, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    week = await db.get(PredictionWeek, week_id)
+    if not week:
+        raise HTTPException(status_code=404, detail="Week not found")
+    season = await db.get(Season, week.season_id)
+    return await _week_payload(db, user, season, week, [])
 
 
 @router.get("/weeks/{week_id}")

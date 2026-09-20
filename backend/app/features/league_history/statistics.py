@@ -367,13 +367,14 @@ def calculate_weekly_highlights(matchups: Iterable[HistoryMatchup]) -> list[High
             for matchup in rows
             for manager_id, manager_name, team_name, score, _ in _teams(matchup)
         ]
-        high_score = max(float(row[3]) for row in team_scores if row[3] is not None)
-        for manager_id, manager_name, team_name, score in team_scores:
-            if score == high_score:
-                highlights.append(HighlightCandidate(
-                    season_id, week, "Highest-scoring fantasy team", manager_id, manager_name,
-                    value=high_score, detail=team_name, source_key=f"highest-team:{manager_id}",
-                ))
+        for label, extreme in (("Highest", max), ("Lowest", min)):
+            target_score = extreme(float(row[3]) for row in team_scores if row[3] is not None)
+            for manager_id, manager_name, team_name, score in team_scores:
+                if score == target_score:
+                    highlights.append(HighlightCandidate(
+                        season_id, week, f"{label}-scoring fantasy team", manager_id, manager_name,
+                        value=target_score, detail=team_name, source_key=f"{label.lower()}-team:{manager_id}",
+                    ))
 
         wins = []
         margins = []
@@ -423,13 +424,14 @@ def calculate_weekly_highlights(matchups: Iterable[HistoryMatchup]) -> list[High
                     continue
                 starter_rows.extend((player_id, float(points[player_id]), manager_id, manager_name) for player_id in active_starters)
         if player_data_complete and starter_rows:
-            high_player = max(row[1] for row in starter_rows)
-            for player_id, value, manager_id, manager_name in starter_rows:
-                if value == high_player:
-                    highlights.append(HighlightCandidate(
-                        season_id, week, "Highest-scoring starter", manager_id, manager_name,
-                        player_id=player_id, value=value, source_key=f"highest-starter:{player_id}",
-                    ))
+            for label, extreme in (("Highest", max), ("Lowest", min)):
+                target_score = extreme(row[1] for row in starter_rows)
+                for player_id, value, manager_id, manager_name in starter_rows:
+                    if value == target_score:
+                        highlights.append(HighlightCandidate(
+                            season_id, week, f"{label}-scoring starter", manager_id, manager_name,
+                            player_id=player_id, value=value, source_key=f"{label.lower()}-starter:{player_id}",
+                        ))
         # Lineup efficiency intentionally remains absent: stored matchup rows do
         # not retain the league's slot eligibility rules needed for a valid optimum.
     return highlights

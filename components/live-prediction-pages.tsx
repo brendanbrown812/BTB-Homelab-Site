@@ -26,11 +26,49 @@ export function LiveHistory() {
 
 export function LiveResults() {
   const [data, setData] = useState<LiveWeek | null>(null); const [user, setUser] = useState<CurrentUser | null>(null); const [error, setError] = useState("");
-  useEffect(() => { Promise.all([apiFetch<LiveWeek>("/predictions/current"), apiFetch<CurrentUser>("/auth/me")]).then(([week, currentUser]) => { setData(week); setUser(currentUser); }).catch(reason => setError(reason instanceof Error ? reason.message : "Could not load results.")); }, []);
-  return <><PageHeading eyebrow="Live from Sleeper" title="Matchup results">Scores for the active BTB week. Prediction outcomes become final after commissioner finalization.</PageHeading>{error ? <Message title="Results unavailable" detail={error} /> : !data || !user ? <Loading /> : <><div className="mb-5 flex items-center gap-3 rounded-2xl border border-white/8 bg-card p-5"><Trophy className="h-5 w-5 text-primary" /><span><strong>Week {data.week.number}</strong> · <span className="capitalize text-slate-400">{data.week.status}</span></span></div><div className="grid gap-3">{data.matchups.map(m => { const pick = data.picks.find(item => item.user_id === user.id && item.matchup_id === m.id); const pickedRosterId = pick?.selected_roster_id ?? null; const aWon = m.winner_roster_id === m.team_a.roster_id; return <div key={m.id} className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_36px] items-center gap-3 rounded-2xl border border-white/8 bg-card p-4 sm:gap-6 sm:px-6"><TeamResult team={m.team_a} winner={aWon} picked={pickedRosterId === m.team_a.roster_id} /><span className="text-xs font-bold text-slate-600">VS</span><TeamResult team={m.team_b} winner={m.winner_roster_id === m.team_b.roster_id} picked={pickedRosterId === m.team_b.roster_id} right /><PickResultIcon result={pick?.result ?? null} picked={pickedRosterId !== null} finalized={data.week.status === "final"} /></div>; })}</div></>}</>;
+  const [weeks, setWeeks] = useState<Array<Pick<LiveWeek["week"], "id" | "number" | "status">>>([]);
+  const [current, setCurrent] = useState<LiveWeek | null>(null);
+  const [selectedWeek, setSelectedWeek] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([apiFetch<LiveWeek>("/predictions/current"), apiFetch<CurrentUser>("/auth/me")])
+      .then(async ([week, currentUser]) => {
+        const options = await apiFetch<Array<Pick<LiveWeek["week"], "id" | "number" | "status">>>(`/predictions/seasons/${week.season.id}/weeks`);
+        if (!cancelled) { setCurrent(week); setData(week); setUser(currentUser); setWeeks(options); }
+      }).catch(reason => { if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not load results."); });
+    return () => { cancelled = true; };
+  }, []);
+  useEffect(() => {
+    if (!selectedWeek) return;
+    let cancelled = false;
+    apiFetch<LiveWeek>(`/predictions/weeks/${selectedWeek}/results`)
+      .then(week => { if (!cancelled) setData(week); })
+      .catch(reason => { if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not load results."); });
+    return () => { cancelled = true; };
+  }, [selectedWeek]);
+  return <><PageHeading eyebrow="Live from Sleeper" title="Matchup results">Browse scores and your picks for any saved week in the active season. Prediction outcomes become final after commissioner finalization.</PageHeading>
+    <section aria-label="Results filters" className="mb-5 rounded-2xl border border-white/8 bg-card p-5">
+      <h2 className="mb-3 text-sm font-bold">Filter results</h2>
+      <label htmlFor="results-week" className="mb-2 block text-xs font-semibold text-slate-400">Week{current && <> · {current.season.year} season</>}</label>
+      <select id="results-week" value={selectedWeek || current?.week.id || ""} disabled={!current} onChange={event => {
+        setError("");
+        const isCurrent = event.target.value === current?.week.id;
+        setData(isCurrent ? current : null);
+        setSelectedWeek(isCurrent ? "" : event.target.value);
+      }} className="w-full rounded-lg border border-white/10 bg-background px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50 sm:w-64">
+        {!current ? <option value="">Loading weeks…</option> : weeks.map(week => <option key={week.id} value={week.id}>Week {week.number}{week.id === current.week.id ? " (Current)" : ""} · {week.status === "final" ? "Final" : week.status === "locked" ? "Locked" : "Open"}</option>)}
+      </select>
+    </section>
+    {error ? <Message title="Results unavailable" detail={error} /> : !data || !user ? <Loading /> : <><div className="mb-5 flex items-center gap-3 rounded-2xl border border-white/8 bg-card p-5"><Trophy className="h-5 w-5 text-primary" /><span><strong>Week {data.week.number}</strong> · <span className="capitalize text-slate-400">{data.week.status}</span></span></div><div className="grid gap-3">{data.matchups.length === 0 && <Message title="No matchups for this week" detail="Results will appear when matchups are available." />}{data.matchups.map(m => { const pick = data.picks.find(item => item.user_id === user.id && item.matchup_id === m.id); const pickedRosterId = pick?.selected_roster_id ?? null; const aWon = m.winner_roster_id === m.team_a.roster_id; return <div key={m.id} className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_36px] items-center gap-3 rounded-2xl border border-white/8 bg-card p-4 sm:gap-6 sm:px-6"><TeamResult team={m.team_a} winner={aWon} picked={pickedRosterId === m.team_a.roster_id} /><span className="text-xs font-bold text-slate-600">VS</span><TeamResult team={m.team_b} winner={m.winner_roster_id === m.team_b.roster_id} picked={pickedRosterId === m.team_b.roster_id} right /><PickResultIcon result={pick?.result ?? null} picked={pickedRosterId !== null} finalized={data.week.status === "final"} /></div>; })}</div></>}</>;
 }
 
-function TeamResult({ team, winner, picked, right }: { team: LiveWeek["matchups"][number]["team_a"]; winner: boolean; picked: boolean; right?: boolean }) { return <div className={right ? "text-right sm:text-left" : ""}><div className={`flex flex-wrap items-center gap-2 ${right ? "justify-end sm:justify-start" : ""}`}><p className={`font-bold ${winner ? "text-primary" : ""}`}>{team.name}</p>{picked && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[.08em] text-primary">Your pick</span>}</div><p className={`mt-1 text-2xl font-black tabular-nums ${winner ? "text-primary" : "text-slate-200"}`}>{team.score === null ? "—" : team.score.toFixed(2)}</p></div>; }
+function TeamResult({ team, winner, picked, right }: { team: LiveWeek["matchups"][number]["team_a"]; winner: boolean; picked: boolean; right?: boolean }) {
+  return <div title={picked ? "Your pick" : undefined} className={`min-w-0 self-stretch rounded-xl border px-3 py-3 sm:px-4 ${right ? "text-right sm:text-left" : ""} ${picked ? `border-primary/30 ${right ? "bg-linear-to-l" : "bg-linear-to-r"} from-primary/25 via-primary/10 to-accent/70` : "border-transparent"}`}>
+    {picked && <span className="sr-only">Your pick: </span>}
+    <p className={`break-words font-bold ${winner ? "text-primary" : "text-slate-100"}`}>{team.name}</p>
+    <p className={`mt-1 text-2xl font-black tabular-nums ${winner ? "text-primary" : "text-slate-200"}`}>{team.score === null ? "—" : team.score.toFixed(2)}</p>
+  </div>;
+}
 function PickResultIcon({ result, picked, finalized }: { result: "win" | "loss" | "push" | null; picked: boolean; finalized: boolean }) {
   const state = !picked
     ? { label: finalized ? "No pick submitted" : "No pick yet", style: finalized ? "bg-red-400/10 text-red-400" : "bg-white/5 text-slate-500", icon: finalized ? <X className="h-4 w-4" /> : <CircleDashed className="h-4 w-4" /> }

@@ -113,9 +113,11 @@ class LeagueHistoryStatisticsTests(unittest.TestCase):
         highlights = calculate_weekly_highlights(rows)
         categories = {item.category for item in highlights}
         self.assertIn("Highest-scoring fantasy team", categories)
+        self.assertIn("Lowest-scoring fantasy team", categories)
         self.assertIn("Biggest win", categories)
         self.assertIn("Closest game", categories)
         self.assertNotIn("Highest-scoring starter", categories)
+        self.assertNotIn("Lowest-scoring starter", categories)
         self.assertNotIn("Lineup efficiency", categories)
 
     def test_multi_week_playoff_totals_do_not_become_weekly_records_or_highlights(self):
@@ -144,6 +146,37 @@ class LeagueHistoryStatisticsTests(unittest.TestCase):
         }
         highlights = calculate_weekly_highlights([self.matchup(1, self.a, self.b, 100, 90, metadata=metadata)])
         self.assertNotIn("Highest-scoring starter", {item.category for item in highlights})
+        self.assertNotIn("Lowest-scoring starter", {item.category for item in highlights})
+
+    def test_lowest_team_highlights_keep_ties_and_skip_incomplete_weeks(self):
+        rows = [
+            self.matchup(1, self.a, self.b, 0, 10),
+            self.matchup(1, self.c, self.d, 20, 0),
+            self.matchup(2, self.a, self.b, -1, None),
+            self.matchup(3, self.a, self.b, 0, 0, metadata={"is_complete": False}),
+        ]
+        lowest = [item for item in calculate_weekly_highlights(rows) if item.category == "Lowest-scoring fantasy team"]
+        self.assertEqual({item.manager_id for item in lowest}, {self.a, self.d})
+        self.assertTrue(all(item.week == 1 and item.value == 0 for item in lowest))
+        self.assertEqual({item.detail for item in lowest}, {"Alpha Team", "Delta Team"})
+
+    def test_lowest_starter_keeps_negative_and_zero_ties_but_excludes_bench_and_empty_slots(self):
+        for score in (-2, 0):
+            with self.subTest(score=score):
+                metadata = {
+                    "team_a": {"starters": ["11", "12", "0"], "players_points": {"11": score, "12": 10, "bench": -10, "0": -20}},
+                    "team_b": {"starters": ["21"], "players_points": {"21": score}},
+                }
+                highlights = calculate_weekly_highlights([self.matchup(1, self.a, self.b, 100, 90, metadata=metadata)])
+                lowest = [item for item in highlights if item.category == "Lowest-scoring starter"]
+                self.assertEqual({(item.player_id, item.manager_id) for item in lowest}, {("11", self.a), ("21", self.b)})
+                self.assertTrue(all(item.value == score for item in lowest))
+
+    def test_manual_lowest_award_overrides_calculated_award(self):
+        calculated = calculate_weekly_highlights([self.matchup(1, self.a, self.b, 100, 90)])
+        manual = HighlightCandidate(self.season, 1, "Lowest-scoring fantasy team", self.c, "Gamma", value=80, source="manual", source_key="override")
+        lowest = [item for item in merge_weekly_highlights(calculated, [manual]) if item.category == manual.category]
+        self.assertEqual(lowest, [manual])
 
     def test_manual_highlight_overrides_calculated_category_but_keeps_custom_awards(self):
         calculated = [
