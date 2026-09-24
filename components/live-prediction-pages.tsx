@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Check, CircleDashed, Clock3, LoaderCircle, Minus, Trophy, X } from "lucide-react";
 import { apiFetch, CurrentUser, LiveWeek } from "@/lib/api";
+import { selectedTeamStyle } from "@/lib/prediction-styles";
 import { PageHeading } from "@/components/page-heading";
 
 type Standing = { user_id: string; display_name: string; wins: number; losses: number; pushes: number };
@@ -63,7 +64,7 @@ export function LiveResults() {
 }
 
 function TeamResult({ team, winner, picked, right }: { team: LiveWeek["matchups"][number]["team_a"]; winner: boolean; picked: boolean; right?: boolean }) {
-  return <div title={picked ? "Your pick" : undefined} className={`min-w-0 self-stretch rounded-xl border px-3 py-3 sm:px-4 ${right ? "text-right sm:text-left" : ""} ${picked ? `border-primary/30 ${right ? "bg-linear-to-l" : "bg-linear-to-r"} from-primary/25 via-primary/10 to-accent/70` : "border-transparent"}`}>
+  return <div title={picked ? "Your pick" : undefined} className={`min-w-0 self-stretch rounded-xl border px-3 py-3 sm:px-4 ${right ? "text-right sm:text-left" : ""} ${picked ? selectedTeamStyle(right) : "border-transparent"}`}>
     {picked && <span className="sr-only">Your pick: </span>}
     <p className={`break-words font-bold ${winner ? "text-primary" : "text-slate-100"}`}>{team.name}</p>
     <p className={`mt-1 text-2xl font-black tabular-nums ${winner ? "text-primary" : "text-slate-200"}`}>{team.score === null ? "—" : team.score.toFixed(2)}</p>

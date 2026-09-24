@@ -35,6 +35,8 @@ def _ensure_local_schema_columns(connection):
             connection.execute(text("ALTER TABLE ptgotw_writeups ADD COLUMN is_published BOOLEAN NOT NULL DEFAULT 1"))
         if "due_date" not in writeup_columns:
             connection.execute(text("ALTER TABLE ptgotw_writeups ADD COLUMN due_date DATE"))
+        if "draft" not in writeup_columns:
+            connection.execute(text("ALTER TABLE ptgotw_writeups ADD COLUMN draft JSON"))
     if "league_transaction_players" in inspector.get_table_names():
         transaction_player_columns = {
             column["name"] for column in inspector.get_columns("league_transaction_players")

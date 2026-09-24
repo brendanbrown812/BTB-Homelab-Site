@@ -28,11 +28,20 @@ export type ScheduledTaskState = {
   consecutive_failures: number;
   last_error: string | null;
 };
+export type WriteupDraft = {
+  content_html: string;
+  year?: number;
+  week?: number;
+  author_id?: string;
+  submitted_by_author?: boolean;
+  due_date?: string | null;
+};
 export type PTGWriteup = {
   id: string;
   year: number;
   week: number;
   content_html: string;
+  draft?: WriteupDraft | null;
   author: { id: string; display_name: string };
   updated_at: string;
   submitted_by_author?: boolean;

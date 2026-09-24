@@ -47,6 +47,7 @@ class _WriteupSanitizer(HTMLParser):
 
 
 class WriteupCreate(BaseModel):
+    id: uuid.UUID | None = None
     year: int = Field(ge=2000, le=2100)
     week: int = Field(ge=1, le=18)
     author_id: uuid.UUID
@@ -161,7 +162,7 @@ async def _author_name(db: AsyncSession, author_id: uuid.UUID) -> str:
     return name
 
 
-def _payload(writeup: PTGWriteup, author_name: str, viewer: User, include_content: bool = True) -> dict:
+def _payload(writeup: PTGWriteup, author_name: str, viewer: User, include_content: bool = True, editing: bool = False) -> dict:
     result = {
         "id": writeup.id,
         "year": writeup.year,
@@ -171,6 +172,9 @@ def _payload(writeup: PTGWriteup, author_name: str, viewer: User, include_conten
     }
     if include_content:
         result["content_html"] = writeup.content_html
+    if editing:
+        # Drafts are exposed only through the permission-checked editor routes.
+        result["draft"] = writeup.draft
     if viewer.role is UserRole.admin:
         result["submitted_by_author"] = writeup.submitted_by_author
         result["has_content"] = bool(writeup.content_html)
@@ -214,7 +218,7 @@ async def editable_writeups(user: User = Depends(current_user), db: AsyncSession
     rows = (await db.execute(query.order_by(PTGWriteup.year.desc(), PTGWriteup.week.desc()))).all()
     if user.role is not UserRole.admin:
         rows = [(writeup, author_name) for writeup, author_name in rows if _author_edit_window_open(writeup)]
-    return [_payload(writeup, author_name, user) for writeup, author_name in rows]
+    return [_payload(writeup, author_name, user, editing=True) for writeup, author_name in rows]
 
 
 @router.get("/upcoming")
@@ -256,6 +260,12 @@ async def list_authors(db: AsyncSession = Depends(get_db)):
 
 @router.post("", status_code=201)
 async def create_writeup(body: WriteupCreate, admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)):
+    if body.id is not None:
+        existing = await db.get(PTGWriteup, body.id)
+        if existing:
+            if existing.created_by_user_id != admin.id:
+                raise HTTPException(status_code=409, detail="Writeup ID already exists")
+            return _payload(existing, await _author_name(db, existing.author_id), admin, editing=True)
     author_name = await _validate_author(db, body.author_id)
     content_html = _clean_content(body.content_html)
     if body.is_published and not content_html:
@@ -263,6 +273,7 @@ async def create_writeup(body: WriteupCreate, admin: User = Depends(admin_user),
     if body.submitted_by_author and body.due_date is None:
         raise HTTPException(status_code=422, detail="Add a due date when assigning a writeup to its author")
     writeup = PTGWriteup(
+        id=body.id or uuid.uuid4(),
         year=body.year,
         week=body.week,
         author_id=body.author_id,
@@ -376,6 +387,7 @@ async def update_writeup(writeup_id: uuid.UUID, body: WriteupUpdate, user: User 
         raise HTTPException(status_code=422, detail="Add the writeup before publishing it")
     writeup.content_html = content_html
     writeup.is_published = next_published
+    writeup.draft = None
     conflict_year, conflict_week = writeup.year, writeup.week
     try:
         await db.commit()
@@ -384,3 +396,29 @@ async def update_writeup(writeup_id: uuid.UUID, body: WriteupUpdate, user: User 
         raise HTTPException(status_code=409, detail=f"A Week {conflict_week} writeup already exists for {conflict_year}") from None
     await db.refresh(writeup)
     return _payload(writeup, await _author_name(db, writeup.author_id), user)
+
+
+@router.put("/{writeup_id}/draft")
+async def autosave_writeup_draft(writeup_id: uuid.UUID, body: WriteupUpdate, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    writeup = await db.get(PTGWriteup, writeup_id)
+    if not writeup:
+        raise HTTPException(status_code=404, detail="Writeup not found")
+    is_admin = user.role is UserRole.admin
+    if not is_admin and not (writeup.author_id == user.id and writeup.submitted_by_author and _author_edit_window_open(writeup)):
+        raise HTTPException(status_code=403, detail="You do not have permission to edit this writeup")
+    draft = {"content_html": _clean_content(body.content_html)}
+    if is_admin:
+        metadata = body.model_dump(mode="json", exclude_unset=True, exclude={"content_html", "is_published"})
+        if metadata.get("author_id") and body.author_id != writeup.author_id:
+            await _validate_author(db, body.author_id)
+        if metadata.get("submitted_by_author", writeup.submitted_by_author) and not metadata.get("due_date", writeup.due_date):
+            raise HTTPException(status_code=422, detail="Add a due date when assigning a writeup to its author")
+        draft.update(metadata)
+    else:
+        # Preserve assignment edits drafted by a commissioner, but never let an
+        # author change those fields through the autosave endpoint.
+        draft = {**(writeup.draft or {}), **draft}
+    writeup.draft = draft
+    await db.commit()
+    await db.refresh(writeup)
+    return _payload(writeup, await _author_name(db, writeup.author_id), user, editing=True)

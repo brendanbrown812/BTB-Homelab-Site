@@ -3,8 +3,10 @@
 /* eslint-disable @next/next/no-img-element -- Sleeper CDN URLs are dynamic and need client-side error fallbacks. */
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, CircleAlert, LoaderCircle, RefreshCw, Save } from "lucide-react";
-import { apiFetch, LivePlayer, LiveTeam, LiveWeek } from "@/lib/api";
+import { Check, ChevronDown, CircleAlert, LoaderCircle, RefreshCw } from "lucide-react";
+import { apiFetch, CurrentUser, LivePlayer, LiveTeam, LiveWeek } from "@/lib/api";
+import { selectedTeamStyle } from "@/lib/prediction-styles";
+import { usePredictionAutosave } from "@/hooks/use-prediction-autosave";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -13,15 +15,15 @@ export function PredictionBoard() {
   const [data, setData] = useState<LiveWeek | null>(null);
   const [picks, setPicks] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const autosave = usePredictionAutosave(data?.week.id);
+  const [deadlinePassed, setDeadlinePassed] = useState(false);
 
   async function load() {
     setError("");
     try {
-      const live = await apiFetch<LiveWeek>("/predictions/current?include_rosters=true");
+      const [live, user] = await Promise.all([apiFetch<LiveWeek>("/predictions/current?include_rosters=true"), apiFetch<CurrentUser>("/auth/me")]);
       setData(live);
-      setPicks(Object.fromEntries(live.picks.filter(p => p.selected_roster_id !== null).map(p => [p.matchup_id, p.selected_roster_id as number])));
+      setPicks(Object.fromEntries(live.picks.filter(p => p.user_id === user.id && p.selected_roster_id !== null).map(p => [p.matchup_id, p.selected_roster_id as number])));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not load Sleeper matchups.");
     }
@@ -29,34 +31,34 @@ export function PredictionBoard() {
 
   useEffect(() => {
     let cancelled = false;
-    apiFetch<LiveWeek>("/predictions/current?include_rosters=true")
-      .then(live => {
+    Promise.all([apiFetch<LiveWeek>("/predictions/current?include_rosters=true"), apiFetch<CurrentUser>("/auth/me")])
+      .then(([live, user]) => {
         if (cancelled) return;
         setData(live);
-        setPicks(Object.fromEntries(live.picks.filter(p => p.selected_roster_id !== null).map(p => [p.matchup_id, p.selected_roster_id as number])));
+        setPicks(Object.fromEntries(live.picks.filter(p => p.user_id === user.id && p.selected_roster_id !== null).map(p => [p.matchup_id, p.selected_roster_id as number])));
       })
       .catch(reason => { if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not load Sleeper matchups."); });
     return () => { cancelled = true; };
   }, []);
+  useEffect(() => {
+    if (!data) return;
+    const timer = window.setInterval(() => setDeadlinePassed(new Date(data.week.lock_at).getTime() <= Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [data]);
+  const saveError = autosave.error instanceof Error ? autosave.error.message : "Could not save your picks. Please retry.";
+  const saveLocked = autosave.status === "error" && saveError === "Picks are locked";
   const count = Object.keys(picks).length;
-  const locked = data ? data.week.status !== "open" || new Date(data.week.lock_at) <= new Date() : true;
+  const locked = data ? saveLocked || deadlinePassed || data.week.status !== "open" || new Date(data.week.lock_at) <= new Date() : true;
   const deadline = useMemo(() => data ? new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(data.week.lock_at)) : "", [data]);
 
-  async function save() {
-    if (!data) return;
-    setSaving(true);
-    setError("");
-    try {
-      await apiFetch(`/predictions/weeks/${data.week.id}/picks`, {
-        method: "PUT",
-        body: JSON.stringify({ picks: data.matchups.map(matchup => ({ matchup_id: matchup.id, selected_roster_id: picks[matchup.id] ?? null })) }),
-      });
-      setSaved(true);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not save picks.");
-    } finally {
-      setSaving(false);
-    }
+  function selectPick(matchupId: string, rosterId: number) {
+    // This runs on a click, not during render; check the exact deadline again.
+    // eslint-disable-next-line react-hooks/purity
+    if (!data || locked || new Date(data.week.lock_at).getTime() <= Date.now()) return;
+    if (picks[matchupId] === rosterId) return;
+    const next = { ...picks, [matchupId]: rosterId };
+    setPicks(next);
+    autosave.submit(Object.entries(next).map(([matchup_id, selected_roster_id]) => ({ matchup_id, selected_roster_id })));
   }
 
   if (error && !data) return <State title="Couldn’t load live Sleeper data" detail={error}><Button onClick={load} variant="secondary"><RefreshCw className="h-4 w-4" />Try again</Button></State>;
@@ -68,12 +70,14 @@ export function PredictionBoard() {
       <div>
         <div className="mb-3 flex items-center gap-2"><Badge className="rounded-full bg-primary/10 px-2.5 py-1 text-primary hover:bg-primary/10">Week {data.week.number}</Badge><span className="text-sm text-slate-500">{data.season.year} season · Live from Sleeper</span></div>
         <h1 className="text-3xl font-black tracking-[-.035em] sm:text-4xl">{locked ? "Your picks" : "Make your picks"}</h1>
-        <p className="mt-2 max-w-xl text-base leading-relaxed text-slate-400">{locked ? "This card is locked. Picks are visible to the league after the deadline." : `Compare the full rosters and choose each matchup winner. Picks lock ${deadline}.`}</p>
+        <p className="mt-2 max-w-xl text-base leading-relaxed text-slate-400">{locked ? "This card is locked. Picks are visible to the league after the deadline." : `Choose each matchup winner—your picks save automatically. Picks lock ${deadline}.`}</p>
       </div>
-      <div className="w-full rounded-2xl border border-white/8 bg-white/[.035] p-4 md:w-[260px]"><div className="mb-2 flex justify-between text-sm"><span className="text-slate-400">Your card</span><span className={saved ? "font-semibold text-emerald-400" : "font-semibold text-white"}>{saved ? "Picks saved" : `${count} of ${data.matchups.length} selected`}</span></div><Progress value={(count / data.matchups.length) * 100} className="h-2 bg-white/8 [&>div]:bg-primary" /></div>
+      <div className="w-full rounded-2xl border border-white/8 bg-white/[.035] p-4 md:w-[260px]"><div className="mb-2 flex justify-between text-sm"><span className="text-slate-400">Your card</span><span className="font-semibold text-white">{count} of {data.matchups.length} selected</span></div><Progress value={(count / data.matchups.length) * 100} className="h-2 bg-white/8 [&>div]:bg-primary" /></div>
     </section>
 
     {error && <p role="alert" className="mb-5 rounded-xl bg-red-400/10 px-4 py-3 text-sm text-red-300">{error}</p>}
+
+    {autosave.status === "error" && <p role="alert" className="mb-5 rounded-xl bg-red-400/10 px-4 py-3 text-sm text-red-300">{locked ? "Picks are locked. Your latest changes were not saved; only previously saved picks count." : `${saveError} Your selections are still here—retry to save them.`}</p>}
 
     <div className="grid gap-5">
       {data.matchups.map(matchup => <MatchupCard
@@ -81,11 +85,16 @@ export function PredictionBoard() {
         matchup={matchup}
         locked={locked}
         selectedRosterId={picks[matchup.id]}
-        onSelect={rosterId => { setPicks(current => ({ ...current, [matchup.id]: rosterId })); setSaved(false); }}
+        onSelect={rosterId => selectPick(matchup.id, rosterId)}
       />)}
     </div>
 
-    {!locked && <div className="sticky bottom-4 z-10 mt-7 flex flex-col items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#151c28]/95 p-3 pl-4 shadow-2xl backdrop-blur-xl sm:flex-row"><div className="flex items-center gap-3 text-sm text-slate-300">{count < data.matchups.length ? <CircleAlert className="h-5 w-5 text-primary" /> : <Check className="h-5 w-5 text-emerald-400" />}<span>{count < data.matchups.length ? `${data.matchups.length - count} matchup${data.matchups.length - count === 1 ? "" : "s"} still need a pick. Blanks score as losses.` : "Your pick card is complete."}</span></div><Button disabled={saving} onClick={save} className="w-full bg-primary font-bold text-primary-foreground sm:w-auto"><Save className="h-4 w-4" />{saving ? "Saving…" : "Save picks"}</Button></div>}
+    {(!locked || autosave.status !== "idle") && <div className="sticky bottom-4 z-10 mt-7 flex flex-col items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#151c28]/95 p-3 pl-4 shadow-2xl backdrop-blur-xl sm:flex-row"><div className="flex items-center gap-3 text-sm text-slate-300">{count < data.matchups.length ? <CircleAlert className="h-5 w-5 text-primary" /> : <Check className="h-5 w-5 text-emerald-400" />}<span>{count < data.matchups.length ? `${data.matchups.length - count} matchup${data.matchups.length - count === 1 ? "" : "s"} still need a pick. Blanks score as losses.` : "Your pick card is complete."}</span></div><div className="flex shrink-0 items-center gap-3">
+      <span role="status" aria-live="polite" className={`flex items-center gap-2 text-sm font-semibold ${autosave.status === "error" ? "text-red-300" : autosave.status === "saved" ? "text-emerald-400" : "text-slate-300"}`}>
+        {autosave.status === "saving" ? <><LoaderCircle className="h-4 w-4 animate-spin" />Saving…</> : autosave.status === "saved" ? <><Check className="h-4 w-4" />Saved</> : autosave.status === "error" ? "Couldn’t save" : "Autosave on"}
+      </span>
+      {autosave.status === "error" && !locked && <Button onClick={() => void autosave.retry()} variant="secondary"><RefreshCw className="h-4 w-4" />Retry</Button>}
+    </div></div>}
   </>;
 }
 
@@ -99,18 +108,18 @@ function MatchupCard({ matchup, locked, selectedRosterId, onSelect }: { matchup:
     <div className="grid grid-cols-[minmax(0,1fr)_28px_minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_48px_minmax(0,1fr)]">
       <TeamPanel team={matchup.team_a} locked={locked} selected={selectedRosterId === matchup.team_a.roster_id} onSelect={() => onSelect(matchup.team_a.roster_id)} benchOpen={benchOpen} onToggleBench={() => setBenchOpen(current => !current)} />
       <div className="flex items-center justify-center border-x border-white/7 text-[10px] font-bold text-slate-600 sm:text-[11px]">VS</div>
-      <TeamPanel team={matchup.team_b} locked={locked} selected={selectedRosterId === matchup.team_b.roster_id} onSelect={() => onSelect(matchup.team_b.roster_id)} benchOpen={benchOpen} onToggleBench={() => setBenchOpen(current => !current)} />
+      <TeamPanel right team={matchup.team_b} locked={locked} selected={selectedRosterId === matchup.team_b.roster_id} onSelect={() => onSelect(matchup.team_b.roster_id)} benchOpen={benchOpen} onToggleBench={() => setBenchOpen(current => !current)} />
     </div>
   </article>;
 }
 
-function TeamPanel({ team, locked, selected, onSelect, benchOpen, onToggleBench }: { team: LiveTeam; locked: boolean; selected: boolean; onSelect: () => void; benchOpen: boolean; onToggleBench: () => void }) {
+function TeamPanel({ team, locked, selected, onSelect, benchOpen, onToggleBench, right = false }: { right?: boolean; team: LiveTeam; locked: boolean; selected: boolean; onSelect: () => void; benchOpen: boolean; onToggleBench: () => void }) {
   const initials = team.name.split(" ").map(value => value[0]).join("").slice(0, 2).toUpperCase();
   return <section className="min-w-0">
-    <button disabled={locked} onClick={onSelect} aria-pressed={selected} className={`group relative flex h-[150px] w-full flex-col items-center gap-2 px-2 py-4 text-center transition disabled:cursor-default sm:h-auto sm:flex-row sm:gap-4 sm:px-5 sm:py-5 sm:text-left ${selected ? "bg-primary/[.09]" : !locked ? "hover:bg-white/[.025]" : ""}`}>
+    <button disabled={locked} onClick={onSelect} aria-pressed={selected} className={`group relative flex h-[150px] border w-full flex-col items-center gap-2 px-2 py-4 text-center transition disabled:cursor-default sm:h-auto sm:flex-row sm:gap-4 sm:px-5 sm:py-5 sm:text-left ${selected ? selectedTeamStyle(right) : `border-transparent ${!locked ? "hover:bg-white/[.025]" : ""}`}`}>
       {selected && <span className="absolute right-2 top-2 grid h-5 w-5 place-items-center rounded-full bg-primary text-primary-foreground sm:right-4 sm:top-4 sm:h-6 sm:w-6"><Check className="h-3 w-3 sm:h-3.5 sm:w-3.5" /></span>}
       <TeamAvatar url={team.avatar_url} initials={initials} selected={selected} />
-      <span className="min-w-0 max-w-full sm:pr-7"><span className="line-clamp-2 min-h-8 text-xs font-bold leading-tight text-white sm:block sm:min-h-0 sm:truncate sm:text-[15px]">{team.name}</span><span className="mt-1 block truncate text-[10px] leading-tight text-slate-500 sm:text-xs">{team.owner} · {team.record}</span><span className={`mt-2 block text-[10px] font-semibold sm:text-xs ${selected ? "text-primary" : "text-slate-500"}`}>{selected ? "Your pick" : locked ? "Not selected" : "Select winner"}</span></span>
+      <span className="min-w-0 max-w-full sm:pr-7"><span className="line-clamp-2 min-h-8 text-xs font-bold leading-tight text-white sm:block sm:min-h-0 sm:truncate sm:text-[15px]">{team.name}</span><span className="mt-1 block truncate text-[10px] leading-tight text-slate-500 sm:text-xs">{team.owner} · {team.record}</span><span className={`mt-2 block text-[10px] font-semibold sm:text-xs ${selected ? "sr-only" : "text-slate-500"}`}>{selected ? "Your pick" : locked ? "Not selected" : "Select winner"}</span></span>
     </button>
     <div className="border-t border-white/7">
       <RosterSection label="Starters" players={team.starters ?? []} />
