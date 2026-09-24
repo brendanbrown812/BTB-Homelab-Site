@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import admin_user, current_user
 from app.database.session import get_db
 from app.features.ptgotw.models import PTGWriteup, PTGWriteupComment
+from app.features.ptgotw.notifications import send_writeup_published_notification
 from app.models.user import User, UserRole
 
 router = APIRouter(prefix="/ptgotw", tags=["PTGOTW"])
@@ -381,6 +382,7 @@ async def update_writeup(writeup_id: uuid.UUID, body: WriteupUpdate, user: User 
             writeup.due_date = body.due_date
         if writeup.submitted_by_author and writeup.due_date is None:
             raise HTTPException(status_code=422, detail="Add a due date when assigning a writeup to its author")
+    was_published = writeup.is_published
     content_html = _clean_content(body.content_html)
     next_published = body.is_published if body.is_published is not None else writeup.is_published
     if next_published and not content_html:
@@ -395,7 +397,10 @@ async def update_writeup(writeup_id: uuid.UUID, body: WriteupUpdate, user: User 
         await db.rollback()
         raise HTTPException(status_code=409, detail=f"A Week {conflict_week} writeup already exists for {conflict_year}") from None
     await db.refresh(writeup)
-    return _payload(writeup, await _author_name(db, writeup.author_id), user)
+    result = _payload(writeup, await _author_name(db, writeup.author_id), user)
+    if not is_admin and not was_published and writeup.is_published:
+        result["notification_status"] = await send_writeup_published_notification(writeup, user.display_name)
+    return result
 
 
 @router.put("/{writeup_id}/draft")

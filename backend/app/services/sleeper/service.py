@@ -3,7 +3,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from time import monotonic
 from .client import SleeperClient
-from .projections import starter_projection
+from .projections import projected_points, starter_projection
 
 
 PLAYER_CACHE_SECONDS = 24 * 60 * 60
@@ -44,6 +44,12 @@ class SleeperMatchup:
     team_a_bench: tuple[SleeperPlayer, ...] = ()
     team_b_starters: tuple[SleeperPlayer, ...] = ()
     team_b_bench: tuple[SleeperPlayer, ...] = ()
+
+
+@dataclass(frozen=True)
+class SleeperProjections:
+    rosters: dict[int, float | None]
+    players: dict[str, float | None]
 
 
 @dataclass(frozen=True)
@@ -268,12 +274,12 @@ class SleeperService:
         state = await self.client.state()
         return int(state["week"])
 
-    async def projected_matchup_scores(self, league_id: str, week: int, matchups: list[SleeperMatchup]) -> dict[int, float | None]:
+    async def weekly_projections(self, league_id: str, week: int, matchups: list[SleeperMatchup]) -> SleeperProjections:
         league = await self.client.league(league_id)
         season = str(league["season"])
         season_type = league.get("season_type") or "regular"
         if not season.isdigit() or season_type not in {"regular", "post", "pre"}:
-            return {}
+            return SleeperProjections(rosters={}, players={})
         key = (season, week, season_type)
         async with _projection_cache_lock:
             cached = _projection_cache.get(key)
@@ -291,8 +297,28 @@ class SleeperService:
             else:
                 stats = cached[1]
         scoring = league.get("scoring_settings") or {}
-        return {
+        roster_scores = {
             roster_id: starter_projection([player.player_id for player in starters], stats, scoring)
             for matchup in matchups
             for roster_id, starters in ((matchup.roster_a, matchup.team_a_starters), (matchup.roster_b, matchup.team_b_starters))
         }
+        player_ids = {
+            player.player_id
+            for matchup in matchups
+            for lineup in (
+                matchup.team_a_starters, matchup.team_a_bench,
+                matchup.team_b_starters, matchup.team_b_bench,
+            )
+            for player in lineup
+        }
+        player_scores = {
+            player_id: (
+                round(points, 2) if (points := projected_points(stats.get(player_id, {}), scoring)) is not None else None
+            )
+            for player_id in player_ids
+        }
+        return SleeperProjections(rosters=roster_scores, players=player_scores)
+
+    async def projected_matchup_scores(self, league_id: str, week: int, matchups: list[SleeperMatchup]) -> dict[int, float | None]:
+        """Backward-compatible team-only projection view."""
+        return (await self.weekly_projections(league_id, week, matchups)).rosters

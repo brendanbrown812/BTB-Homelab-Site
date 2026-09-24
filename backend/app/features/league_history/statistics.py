@@ -331,8 +331,15 @@ def calculate_records(
     transactions: Iterable[HistoryTransaction],
     placements: Iterable[HistoryPlacement],
     manager_names: dict[uuid.UUID, str],
+    *,
+    completed_season_ids: set[uuid.UUID] | None = None,
 ) -> list[RecordStatistic]:
     matchup_rows = list(matchups)
+    completed_season_matchups = (
+        matchup_rows
+        if completed_season_ids is None
+        else [matchup for matchup in matchup_rows if matchup.season_id in completed_season_ids]
+    )
     transaction_rows = list(transactions)
     placement_rows = list(placements)
     candidates = [
@@ -341,8 +348,8 @@ def calculate_records(
         margin_record(matchup_rows, biggest=True),
         margin_record(matchup_rows, biggest=False),
         season_points_record(matchup_rows),
-        season_record_extreme(matchup_rows, best=True),
-        season_record_extreme(matchup_rows, best=False),
+        season_record_extreme(completed_season_matchups, best=True),
+        season_record_extreme(completed_season_matchups, best=False),
         streak_record(matchup_rows, winning=True),
         streak_record(matchup_rows, winning=False),
         transaction_leader(transaction_rows, manager_names, acquisitions=False),

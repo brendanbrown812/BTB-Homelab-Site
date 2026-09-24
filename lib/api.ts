@@ -1,7 +1,7 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
 
 export type CurrentUser = { id: string; username: string; display_name: string; role: "user" | "admin" };
-export type LivePlayer = { player_id: string; name: string; position: string; team: string | null; injury_status: string | null; points: number | null; image_url: string | null };
+export type LivePlayer = { player_id: string; name: string; position: string; team: string | null; injury_status: string | null; points: number | null; projected_points?: number | null; image_url: string | null };
 export type LiveTeam = { roster_id: number; name: string; owner: string; record: string; score: number | null; projected_score?: number | null; avatar_url?: string | null; starters?: LivePlayer[]; bench?: LivePlayer[] };
 export type LiveMatchup = { id: string; sleeper_matchup_id: number; team_a: LiveTeam; team_b: LiveTeam; winner_roster_id: number | null };
 export type LiveWeek = {
@@ -14,7 +14,7 @@ export type CurrentSubmissionStatus = {
   season: number;
   week: number;
   total_matchups: number;
-  users: Array<{ user_id: string; display_name: string; submitted_picks: number }>;
+  users: Array<{ user_id: string; display_name: string; last_active_at: string | null; submitted_picks: number }>;
 };
 export type ScheduledTaskState = {
   key: string;

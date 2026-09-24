@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     public_site_url: str = "http://localhost:3000"
     discord_poll_webhook_url: str = ""
     discord_poll_role_id: str = ""
+    discord_predictions_webhook_url: str = ""
+    discord_ptgotw_webhook_url: str = ""
 
     model_config = SettingsConfigDict(env_file=(".env", "../.env"), extra="ignore")
 

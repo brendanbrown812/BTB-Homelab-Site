@@ -106,7 +106,7 @@ function MatchupCard({ matchup, locked, selectedRosterId, onSelect }: { matchup:
   const [benchOpen, setBenchOpen] = useState(false);
 
   return <article className="overflow-hidden rounded-2xl border border-white/9 bg-card">
-    <div className="flex items-center justify-between gap-2 border-b border-white/7 px-3 py-3 text-[10px] font-medium text-slate-500 sm:px-5 sm:text-xs"><span>SLEEPER MATCHUP {matchup.sleeper_matchup_id}</span><span className="shrink-0 tabular-nums text-slate-400">{matchup.team_a.score ?? "—"} – {matchup.team_b.score ?? "—"}</span></div>
+    <div className="border-b border-white/7 px-3 py-3 text-[10px] font-medium text-slate-500 sm:px-5 sm:text-xs">SLEEPER MATCHUP {matchup.sleeper_matchup_id}</div>
     <div className="grid grid-cols-[minmax(0,1fr)_28px_minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_48px_minmax(0,1fr)]">
       <TeamPanel team={matchup.team_a} locked={locked} selected={selectedRosterId === matchup.team_a.roster_id} onSelect={() => onSelect(matchup.team_a.roster_id)} benchOpen={benchOpen} onToggleBench={() => setBenchOpen(current => !current)} />
       <div className="flex items-center justify-center border-x border-white/7 text-[10px] font-bold text-slate-600 sm:text-[11px]">VS</div>
@@ -160,16 +160,17 @@ function BenchSection({ players, rosterId, open, onToggle }: { players: LivePlay
 
 function RosterSection({ label, players, muted = false }: { label: string; players: LivePlayer[]; muted?: boolean }) {
   return <div className={muted ? "bg-black/10" : ""}>
-    <div className="flex items-center justify-between border-b border-white/6 px-2.5 py-2.5 sm:px-5"><h3 className="text-[9px] font-bold uppercase tracking-[.1em] text-slate-500 sm:text-[11px] sm:tracking-[.14em]">{label} · {players.length}</h3><span className="text-[8px] font-semibold uppercase tracking-[.08em] text-slate-600 sm:text-[10px] sm:tracking-[.12em]">Week pts</span></div>
+    <div className="grid grid-cols-[1fr_32px_34px] items-center gap-1.5 border-b border-white/6 px-2.5 py-2.5 sm:grid-cols-[1fr_42px_48px] sm:gap-3 sm:px-5"><h3 className="text-[9px] font-bold uppercase tracking-[.1em] text-slate-500 sm:text-[11px] sm:tracking-[.14em]">{label} · {players.length}</h3><span className="text-right text-[7px] font-semibold uppercase tracking-[.04em] text-slate-600 sm:text-[9px]">Actual</span><span className="text-right text-[7px] font-semibold uppercase tracking-[.04em] text-slate-600 sm:text-[9px]">Proj.</span></div>
     {players.length ? <div className="divide-y divide-white/5">{players.map(player => <PlayerRow key={player.player_id} player={player} muted={muted} />)}</div> : <p className="px-5 py-4 text-sm text-slate-600">No {label.toLowerCase()} returned by Sleeper.</p>}
   </div>;
 }
 
 function PlayerRow({ player, muted }: { player: LivePlayer; muted: boolean }) {
-  return <div className={`grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-1.5 px-2 py-2 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:gap-3 sm:px-5 sm:py-2.5 ${muted ? "text-slate-400" : ""}`}>
+  return <div className={`grid grid-cols-[24px_minmax(0,1fr)_32px_34px] items-center gap-1.5 px-2 py-2 sm:grid-cols-[36px_minmax(0,1fr)_42px_48px] sm:gap-3 sm:px-5 sm:py-2.5 ${muted ? "text-slate-400" : ""}`}>
     <PlayerAvatar player={player} />
     <div className="min-w-0"><div className="flex min-w-0 items-center gap-1 sm:gap-2"><span className="shrink-0 rounded bg-white/5 px-1 py-0.5 text-[7px] font-bold text-slate-400 sm:rounded-md sm:px-1.5 sm:text-[9px]">{player.position}</span><p className={`truncate text-[10px] font-semibold sm:text-sm ${muted ? "text-slate-300" : "text-slate-100"}`}>{player.name}</p></div><p className="mt-0.5 truncate text-[8px] text-slate-600 sm:text-[11px]">{player.team ?? "Free agent"}{player.injury_status ? <span className="text-amber-400"> · {player.injury_status}</span> : null}</p></div>
-    <span className={`tabular-nums text-[10px] font-semibold sm:text-sm ${player.points && player.points > 0 ? "text-primary" : "text-slate-500"}`}>{player.points === null ? "—" : player.points.toFixed(1)}</span>
+    <span className={`text-right tabular-nums text-[10px] font-semibold sm:text-sm ${player.points && player.points > 0 ? "text-slate-300" : "text-slate-500"}`}>{player.points === null ? "—" : player.points.toFixed(1)}</span>
+    <span className={`text-right tabular-nums text-[10px] font-semibold sm:text-sm ${player.projected_points != null ? "text-primary" : "text-slate-600"}`}>{player.projected_points == null ? "—" : player.projected_points.toFixed(1)}</span>
   </div>;
 }
 

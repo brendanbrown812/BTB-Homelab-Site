@@ -1,5 +1,6 @@
 import unittest
 from datetime import date, timedelta
+from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -51,6 +52,58 @@ class PTGOTWTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(admin_listing["writeups"]), 1)
             self.assertFalse(admin_listing["writeups"][0]["is_published"])
             self.assertTrue(admin_listing["writeups"][0]["has_content"])
+
+    async def test_only_member_publish_transition_sends_discord_notification(self):
+        async with self.sessions() as db:
+            admin = User(username="admin", display_name="Admin", role=UserRole.admin, is_active=True)
+            author = User(username="writer", display_name="The Writer", role=UserRole.user, is_active=True)
+            db.add_all([admin, author]); await db.commit()
+            created = await create_writeup(
+                WriteupCreate(
+                    year=2026,
+                    week=4,
+                    author_id=author.id,
+                    submitted_by_author=True,
+                    due_date=date.today(),
+                ),
+                admin=admin,
+                db=db,
+            )
+
+            with patch(
+                "app.features.ptgotw.routes.send_writeup_published_notification",
+                new=AsyncMock(return_value="sent"),
+            ) as notify:
+                published = await update_writeup(
+                    created["id"],
+                    WriteupUpdate(content_html="Published", is_published=True),
+                    user=author,
+                    db=db,
+                )
+                await update_writeup(
+                    created["id"],
+                    WriteupUpdate(content_html="Edited", is_published=True),
+                    user=author,
+                    db=db,
+                )
+                await update_writeup(
+                    created["id"],
+                    WriteupUpdate(content_html="Admin draft", is_published=False),
+                    user=admin,
+                    db=db,
+                )
+                await update_writeup(
+                    created["id"],
+                    WriteupUpdate(content_html="Admin published", is_published=True),
+                    user=admin,
+                    db=db,
+                )
+
+            self.assertEqual(published["notification_status"], "sent")
+            notify.assert_awaited_once()
+            notified_writeup, display_name = notify.await_args.args
+            self.assertEqual(notified_writeup.id, created["id"])
+            self.assertEqual(display_name, "The Writer")
 
     async def test_unassigned_user_cannot_edit(self):
         async with self.sessions() as db:

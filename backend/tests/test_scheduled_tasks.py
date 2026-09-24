@@ -8,7 +8,10 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.auth.dependencies import admin_user
 from app.database.base import Base
 from app.features.predictions.models import PredictionMatchup, PredictionWeek, WeekStatus
-from app.features.predictions.scheduled_tasks import auto_finalize_prediction_weeks
+from app.features.predictions.scheduled_tasks import (
+    auto_finalize_prediction_weeks,
+    send_prediction_deadline_reminder,
+)
 from app.models.season import Season
 from app.models.user import User, UserRole
 from app.tasks.models import ScheduledTask, ScheduledTaskRun, ScheduledTaskRunStatus
@@ -58,8 +61,11 @@ class ScheduledTaskRunnerTests(unittest.IsolatedAsyncioTestCase):
         async with self.sessions() as db:
             await sync_task_definitions(db, now)
             task = await db.get(ScheduledTask, "predictions.auto_finalize")
+            reminder = await db.get(ScheduledTask, "predictions.deadline_reminder")
             self.assertEqual(task.schedule, "Tuesday 07:00 America/Chicago")
             self.assertEqual(task.next_run_at, datetime(2026, 9, 15, 12))
+            self.assertEqual(reminder.schedule, "Thursday 07:00 America/Chicago")
+            self.assertEqual(reminder.next_run_at, datetime(2026, 9, 17, 12))
             task.enabled = False
             task.description = "old description"
             await db.commit()
@@ -176,14 +182,21 @@ class PredictionAutoFinalizeTests(unittest.IsolatedAsyncioTestCase):
             with patch(
                 "app.features.predictions.scheduled_tasks.refresh_prediction_week",
                 new=AsyncMock(return_value=1),
-            ) as refresh:
+            ) as refresh, patch(
+                "app.features.predictions.scheduled_tasks.import_sleeper_season",
+                new=AsyncMock(return_value={"status": "succeeded", "counts": {"matchups": 6}}),
+            ) as history_sync:
                 first = await auto_finalize_prediction_weeks(db)
                 await db.commit()
                 second = await auto_finalize_prediction_weeks(db)
 
             self.assertEqual(first["weeks_finalized"], [1])
-            self.assertEqual(second["status"], "skipped")
+            self.assertEqual(first["history_sync"], "succeeded")
+            self.assertEqual(first["history_matchups"], 6)
+            self.assertEqual(second["weeks_finalized"], [])
             self.assertEqual(refresh.await_count, 1)
+            self.assertEqual(history_sync.await_count, 2)
+            history_sync.assert_awaited_with(db, season.id)
             self.assertEqual(week.status, WeekStatus.final)
 
     async def test_future_and_inactive_season_weeks_are_not_finalized(self):
@@ -205,9 +218,15 @@ class PredictionAutoFinalizeTests(unittest.IsolatedAsyncioTestCase):
             db.add_all([future, old])
             await db.commit()
 
-            result = await auto_finalize_prediction_weeks(db)
+            with patch(
+                "app.features.predictions.scheduled_tasks.import_sleeper_season",
+                new=AsyncMock(return_value={"status": "succeeded", "counts": {"matchups": 4}}),
+            ) as history_sync:
+                result = await auto_finalize_prediction_weeks(db)
 
-            self.assertEqual(result["status"], "skipped")
+            self.assertEqual(result["status"], "succeeded")
+            self.assertEqual(result["weeks_finalized"], [])
+            history_sync.assert_awaited_once_with(db, active.id)
             self.assertEqual(future.status, WeekStatus.open)
             self.assertEqual(old.status, WeekStatus.open)
 
@@ -227,11 +246,104 @@ class PredictionAutoFinalizeTests(unittest.IsolatedAsyncioTestCase):
             with patch(
                 "app.features.predictions.scheduled_tasks.refresh_prediction_week",
                 new=AsyncMock(return_value=0),
-            ):
+            ), patch(
+                "app.features.predictions.scheduled_tasks.import_sleeper_season",
+                new=AsyncMock(),
+            ) as history_sync:
                 with self.assertRaisesRegex(RuntimeError, "returned no matchups"):
                     await auto_finalize_prediction_weeks(db)
 
+            history_sync.assert_not_awaited()
             self.assertEqual(week.status, WeekStatus.open)
+
+    async def test_history_sync_failure_is_raised_even_after_week_was_already_finalized(self):
+        async with self.sessions() as db:
+            season = Season(year=2026, sleeper_league_id="league", is_active=True)
+            db.add(season)
+            await db.commit()
+
+            with patch(
+                "app.features.predictions.scheduled_tasks.import_sleeper_season",
+                new=AsyncMock(return_value={"status": "needs_attention", "counts": {}}),
+            ) as history_sync:
+                with self.assertRaisesRegex(RuntimeError, "needs_attention"):
+                    await auto_finalize_prediction_weeks(db)
+
+            history_sync.assert_awaited_once_with(db, season.id)
+
+
+class PredictionDeadlineReminderTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.engine = create_async_engine("sqlite+aiosqlite://")
+        async with self.engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
+
+    async def asyncTearDown(self):
+        await self.engine.dispose()
+
+    async def test_open_week_twelve_hours_from_lock_sends_reminder(self):
+        now = datetime(2026, 9, 24, 12, tzinfo=timezone.utc)
+        week = PredictionWeek(
+            season_id=Season().id,
+            week_number=3,
+            lock_at=now + timedelta(hours=12),
+            status=WeekStatus.open,
+        )
+        settings = type("Settings", (), {"discord_predictions_webhook_url": "https://discord.com/api/webhooks/123/token"})()
+        async with self.sessions() as db:
+            with patch(
+                "app.features.predictions.scheduled_tasks.get_settings", return_value=settings,
+            ), patch(
+                "app.features.predictions.scheduled_tasks._sync_current",
+                new=AsyncMock(return_value=(Season(), week, [])),
+            ) as sync_current, patch(
+                "app.features.predictions.scheduled_tasks.send_prediction_deadline_notification",
+                new=AsyncMock(return_value="sent"),
+            ) as notify:
+                result = await send_prediction_deadline_reminder(db, now=now)
+
+        self.assertEqual(result["status"], "succeeded")
+        self.assertEqual(result["week"], 3)
+        sync_current.assert_awaited_once_with(db)
+        notify.assert_awaited_once_with()
+
+    async def test_missing_webhook_skips_without_syncing_sleeper(self):
+        settings = type("Settings", (), {"discord_predictions_webhook_url": ""})()
+        async with self.sessions() as db:
+            with patch(
+                "app.features.predictions.scheduled_tasks.get_settings", return_value=settings,
+            ), patch(
+                "app.features.predictions.scheduled_tasks._sync_current", new=AsyncMock(),
+            ) as sync_current:
+                result = await send_prediction_deadline_reminder(db)
+
+        self.assertEqual(result["status"], "skipped")
+        sync_current.assert_not_awaited()
+
+    async def test_week_outside_reminder_window_does_not_send(self):
+        now = datetime(2026, 9, 24, 12, tzinfo=timezone.utc)
+        week = PredictionWeek(
+            season_id=Season().id,
+            week_number=3,
+            lock_at=now + timedelta(hours=8),
+            status=WeekStatus.open,
+        )
+        settings = type("Settings", (), {"discord_predictions_webhook_url": "https://discord.com/api/webhooks/123/token"})()
+        async with self.sessions() as db:
+            with patch(
+                "app.features.predictions.scheduled_tasks.get_settings", return_value=settings,
+            ), patch(
+                "app.features.predictions.scheduled_tasks._sync_current",
+                new=AsyncMock(return_value=(Season(), week, [])),
+            ), patch(
+                "app.features.predictions.scheduled_tasks.send_prediction_deadline_notification",
+                new=AsyncMock(),
+            ) as notify:
+                result = await send_prediction_deadline_reminder(db, now=now)
+
+        self.assertEqual(result["status"], "skipped")
+        notify.assert_not_awaited()
 
 
 if __name__ == "__main__":

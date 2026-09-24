@@ -576,6 +576,7 @@ async def public_records(db: AsyncSession = Depends(get_db)):
         transaction_rows,
         placement_rows,
         {manager.id: manager.display_name for manager in managers},
+        completed_season_ids={season.id for season in seasons if not season.is_active},
     )
     return {"records": [{
         "key": record.key,

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -18,6 +19,8 @@ async def current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = D
         user = None
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    user.last_active_at = datetime.now(timezone.utc)
+    await db.commit()
     return user
 
 

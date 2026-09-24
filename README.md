@@ -14,7 +14,8 @@ BTB is a private, homelab-friendly website for one fantasy football league. It c
 - Weekly records, standings, history, and champions
 - Admin refresh, finalize, and recalculate endpoints
 - Database-backed recurring tasks with execution history and safe retry leases
-- Automatic prediction-week refresh and finalization every Tuesday at 7:00 AM Central
+- Automatic prediction-week refresh, finalization, and current-season history sync every Tuesday at 7:00 AM Central
+- Automatic Discord prediction reminder every Thursday at 7:00 AM Central
 - PostgreSQL persistence, Alembic migrations, and Docker Compose
 - Permanent manager profiles that survive team-name changes and do not require BTB login accounts
 - ESPN-era matchup history for 2020–2021 through a one-time Notion import
@@ -50,7 +51,11 @@ Sleeper is the live source for current fantasy data and the import source for Sl
 6. In **Admin → BTB accounts**, create your permanent admin account, copy its generated password, and sign in with it.
 7. Clear `BOOTSTRAP_ADMIN_PASSWORD` in `.env` and restart the API. This disables the environment bootstrap account.
 
-The API applies migrations at startup. PostgreSQL data lives in the `btb_postgres` volume. After the API is healthy, the dedicated `scheduler` service starts and registers recurring tasks. Prediction weeks are refreshed and finalized every Tuesday at 7:00 AM in `America/Chicago`, including daylight-saving-time changes. Failed runs are recorded and retried after `TASK_RETRY_MINUTES`; the existing commissioner buttons remain available as manual fallbacks.
+The API applies migrations at startup. PostgreSQL data lives in the `btb_postgres` volume. After the API is healthy, the dedicated `scheduler` service starts and registers recurring tasks. Prediction weeks are refreshed and finalized, then the active Sleeper season is imported into league history, every Tuesday at 7:00 AM in `America/Chicago`, including daylight-saving-time changes. Failed runs are recorded and retried after `TASK_RETRY_MINUTES`; the existing commissioner buttons remain available as manual fallbacks.
+
+Set `DISCORD_PREDICTIONS_WEBHOOK_URL` to the webhook for the predictions-notifications channel. The scheduler sends its reminder every Thursday at 7:00 AM in `America/Chicago` when the current prediction card is approximately 12 hours from locking.
+
+Set `DISCORD_PTGOTW_WEBHOOK_URL` to the webhook for the PTGOTW writeup-notifications channel. When a non-admin author publishes an assigned writeup, the site posts the author, week, and a direct link to that writeup.
 
 ## Local development
 

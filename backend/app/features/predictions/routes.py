@@ -82,18 +82,25 @@ async def _sync_current(db: AsyncSession, include_rosters: bool = False) -> tupl
 @router.get("/current")
 async def current_week(include_rosters: bool = False, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
     season, week, live_matchups = await _sync_current(db, include_rosters)
-    projections = {}
+    roster_projections = {}
+    player_projections = {}
     if include_rosters and week.status is not WeekStatus.final:
         try:
-            projections = await SleeperService().projected_matchup_scores(season.sleeper_league_id, week.week_number, live_matchups)
+            projections = await SleeperService().weekly_projections(season.sleeper_league_id, week.week_number, live_matchups)
+            roster_projections = projections.rosters
+            player_projections = projections.players
         except Exception:
             logging.getLogger(__name__).warning("Weekly projections unavailable", exc_info=True)
-    return await _week_payload(db, user, season, week, live_matchups, include_rosters, projections)
+    return await _week_payload(
+        db, user, season, week, live_matchups, include_rosters,
+        roster_projections, player_projections,
+    )
 
 
 async def _week_payload(db: AsyncSession, user: User, season: Season, week: PredictionWeek,
                         live_matchups: list[SleeperMatchup], include_rosters: bool = False,
-                        projections: dict[int, float | None] | None = None):
+                        roster_projections: dict[int, float | None] | None = None,
+                        player_projections: dict[str, float | None] | None = None):
     matchups = (await db.scalars(select(PredictionMatchup).where(PredictionMatchup.week_id == week.id).order_by(PredictionMatchup.sleeper_matchup_id))).all()
     picks_query = select(Prediction).where(Prediction.matchup_id.in_([m.id for m in matchups]))
     public = datetime.now(timezone.utc) >= _utc(week.lock_at)
@@ -110,6 +117,7 @@ async def _week_payload(db: AsyncSession, user: User, season: Season, week: Pred
             "team": player.team,
             "injury_status": player.injury_status,
             "points": player.points,
+            "projected_points": (player_projections or {}).get(player.player_id),
             "image_url": player.image_url,
         } for player in players]
 
@@ -123,7 +131,7 @@ async def _week_payload(db: AsyncSession, user: User, season: Season, week: Pred
             "owner": getattr(matchup, f"team_{side}_owner"),
             "record": getattr(matchup, f"team_{side}_record"),
             "score": getattr(matchup, f"team_{side}_score"),
-            "projected_score": (projections or {}).get(roster_id),
+            "projected_score": (roster_projections or {}).get(roster_id),
             "avatar_url": getattr(live, f"team_{live_side}_avatar_url") if live else None,
         }
         if include_rosters and live:

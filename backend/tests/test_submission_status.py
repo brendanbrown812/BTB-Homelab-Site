@@ -25,7 +25,8 @@ class SubmissionStatusTests(unittest.IsolatedAsyncioTestCase):
         async with self.session_factory() as db:
             season = Season(year=2026, sleeper_league_id="league", is_active=True)
             admin = User(username="admin", display_name="Admin", role=UserRole.admin, is_active=True)
-            alice = User(username="alice", display_name="Alice", role=UserRole.user, is_active=True)
+            last_active_at = datetime(2026, 9, 23, 18, 30, tzinfo=timezone.utc)
+            alice = User(username="alice", display_name="Alice", role=UserRole.user, is_active=True, last_active_at=last_active_at)
             bob = User(username="bob", display_name="Bob", role=UserRole.user, is_active=True)
             inactive = User(username="inactive", display_name="Inactive", role=UserRole.user, is_active=False)
             db.add_all([season, admin, alice, bob, inactive])
@@ -59,7 +60,10 @@ class SubmissionStatusTests(unittest.IsolatedAsyncioTestCase):
             [(user["display_name"], user["submitted_picks"]) for user in result["users"]],
             [("Alice", 1), ("Bob", 2)],
         )
-        self.assertEqual(set(result["users"][0]), {"user_id", "display_name", "submitted_picks"})
+        self.assertEqual(result["users"][0]["last_active_at"], last_active_at)
+        self.assertEqual(result["users"][0]["last_active_at"].utcoffset(), timezone.utc.utcoffset(None))
+        self.assertIsNone(result["users"][1]["last_active_at"])
+        self.assertEqual(set(result["users"][0]), {"user_id", "display_name", "last_active_at", "submitted_picks"})
 
 
 if __name__ == "__main__":

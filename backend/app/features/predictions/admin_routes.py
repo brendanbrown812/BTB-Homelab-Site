@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,14 @@ from app.features.predictions.routes import _sync_current
 from app.models.user import User
 
 router = APIRouter(prefix="/admin/predictions", tags=["admin predictions"], dependencies=[Depends(admin_user)])
+
+
+def _explicit_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 @router.get("/current/submissions")
@@ -31,7 +40,7 @@ async def current_submission_status(admin: User = Depends(admin_user), db: Async
     )
     rows = (
         await db.execute(
-            select(User.id, User.display_name, submitted_count.label("submitted_picks"))
+            select(User.id, User.display_name, User.last_active_at, submitted_count.label("submitted_picks"))
             .where(User.is_active.is_(True), User.id != admin.id)
             .order_by(User.display_name)
         )
@@ -44,6 +53,7 @@ async def current_submission_status(admin: User = Depends(admin_user), db: Async
             {
                 "user_id": row.id,
                 "display_name": row.display_name,
+                "last_active_at": _explicit_utc(row.last_active_at),
                 "submitted_picks": row.submitted_picks,
             }
             for row in rows

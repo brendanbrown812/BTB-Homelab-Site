@@ -60,12 +60,13 @@ export default function SubmissionStatusPage() {
 
       <section className="overflow-hidden rounded-2xl border border-white/8 bg-card">
         {data.users.length ? <Table>
-          <TableHeader><TableRow className="border-white/8 hover:bg-transparent"><TableHead className="px-5 text-slate-500">Member</TableHead><TableHead className="px-5 text-right text-slate-500">Picks submitted</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow className="border-white/8 hover:bg-transparent"><TableHead className="px-5 text-slate-500">Member</TableHead><TableHead className="px-5 text-slate-500">Last active</TableHead><TableHead className="px-5 text-right text-slate-500">Picks submitted</TableHead></TableRow></TableHeader>
           <TableBody>{data.users.map(user => {
             const complete = data.total_matchups > 0 && user.submitted_picks >= data.total_matchups;
             const progress = data.total_matchups ? (user.submitted_picks / data.total_matchups) * 100 : 0;
             return <TableRow key={user.user_id} className="border-white/7 hover:bg-white/[.025]">
               <TableCell className="px-5 py-4"><div className="flex items-center gap-3">{complete ? <CheckCircle2 className="h-5 w-5 text-emerald-400" /> : <CircleDashed className="h-5 w-5 text-slate-600" />}<span className="font-semibold text-slate-100">{user.display_name}</span></div></TableCell>
+              <TableCell className="px-5 py-4 text-sm text-slate-400">{user.last_active_at ? new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago", timeZoneName: "short" }).format(new Date(user.last_active_at)) : "Never"}</TableCell>
               <TableCell className="px-5 py-4"><div className="ml-auto flex w-[150px] items-center justify-end gap-3"><Progress value={progress} className="h-1.5 w-20 bg-white/8 [&>div]:bg-primary" /><span className={`min-w-12 text-right font-bold tabular-nums ${complete ? "text-emerald-400" : "text-slate-300"}`}>{user.submitted_picks}/{data.total_matchups}</span></div></TableCell>
             </TableRow>;
           })}</TableBody>

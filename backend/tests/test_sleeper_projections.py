@@ -42,8 +42,17 @@ class ProjectionServiceTests(unittest.IsolatedAsyncioTestCase):
             projections=AsyncMock(return_value=[{"player_id": "1", "stats": {"rec": 4}, "season": "2026", "season_type": "regular", "week": 3}]),
         )
         adapter = service.SleeperService(client)
-        matchups = [SimpleNamespace(roster_a=1, roster_b=2, team_a_starters=[SimpleNamespace(player_id="1")], team_b_starters=[SimpleNamespace(player_id="missing")])]
-        self.assertEqual(await adapter.projected_matchup_scores("league", 3, matchups), {1: 2, 2: None})
+        matchups = [SimpleNamespace(
+            roster_a=1,
+            roster_b=2,
+            team_a_starters=[SimpleNamespace(player_id="1")],
+            team_a_bench=[SimpleNamespace(player_id="bench")],
+            team_b_starters=[SimpleNamespace(player_id="missing")],
+            team_b_bench=[],
+        )]
+        projection = await adapter.weekly_projections("league", 3, matchups)
+        self.assertEqual(projection.rosters, {1: 2, 2: None})
+        self.assertEqual(projection.players, {"1": 2, "bench": None, "missing": None})
         client.league.return_value["scoring_settings"] = {"rec": 1}
         self.assertEqual((await adapter.projected_matchup_scores("other-league", 3, matchups))[1], 4)
         self.assertEqual(client.projections.await_count, 1)
@@ -57,8 +66,8 @@ class ProjectionServiceTests(unittest.IsolatedAsyncioTestCase):
         season = SimpleNamespace(sleeper_league_id="league")
         week = SimpleNamespace(status=WeekStatus.open, week_number=3)
         with patch.object(routes, "_sync_current", AsyncMock(return_value=(season, week, []))), patch.object(routes, "_week_payload", AsyncMock(return_value={"matchups": []})) as payload, patch.object(routes, "SleeperService") as adapter:
-            adapter.return_value.projected_matchup_scores = AsyncMock(side_effect=RuntimeError("Unavailable"))
+            adapter.return_value.weekly_projections = AsyncMock(side_effect=RuntimeError("Unavailable"))
             with self.assertLogs(routes.__name__, level="WARNING"):
                 result = await routes.current_week(True, user=None, db=None)
             self.assertEqual(result, {"matchups": []})
-            self.assertEqual(payload.call_args.args[-1], {})
+            self.assertEqual(payload.call_args.args[-2:], ({}, {}))

@@ -253,13 +253,15 @@ class LeagueHistoryPublicTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_records_api_shapes_ties_and_links_from_history_only(self):
         async with self.sessions() as db:
-            await self._seed(db)
+            old, _, _, _ = await self._seed(db)
             payload = await public_records(db=db)
             by_key = {record["key"]: record for record in payload["records"]}
             self.assertEqual(by_key["highest_weekly_score"]["entries"][0]["year"], 2020)
             self.assertIsNotNone(by_key["highest_weekly_score"]["entries"][0]["season_id"])
             self.assertIsNotNone(by_key["career_wins"]["entries"][0]["manager_id"])
             self.assertEqual(by_key["most_trades"]["entries"][0]["detail"], "1 trades")
+            self.assertEqual({entry["season_id"] for entry in by_key["best_season_record"]["entries"]}, {old.id})
+            self.assertEqual({entry["season_id"] for entry in by_key["worst_season_record"]["entries"]}, {old.id})
             self.assertEqual(payload["custom_facts"][0]["year"], 2020)
 
     async def test_overview_summarizes_latest_history_and_former_champion(self):

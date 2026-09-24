@@ -29,6 +29,8 @@ def _ensure_local_schema_columns(connection):
     users_columns = {column["name"] for column in inspector.get_columns("users")}
     if "is_deleted" not in users_columns:
         connection.execute(text("ALTER TABLE users ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT 0"))
+    if "last_active_at" not in users_columns:
+        connection.execute(text("ALTER TABLE users ADD COLUMN last_active_at DATETIME"))
     if "ptgotw_writeups" in inspector.get_table_names():
         writeup_columns = {column["name"] for column in inspector.get_columns("ptgotw_writeups")}
         if "is_published" not in writeup_columns:
