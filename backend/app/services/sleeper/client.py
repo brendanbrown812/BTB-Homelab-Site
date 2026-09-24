@@ -44,3 +44,9 @@ class SleeperClient:
 
     async def state(self, sport: str = "nfl") -> dict:
         return await self.get(f"/state/{sport}")  # type: ignore[return-value]
+
+    async def projections(self, season: str, week: int, season_type: str = "regular") -> list[dict]:
+        # Sleeper serves weekly projections separately from the public v1 API.
+        return await self.get(
+            f"https://api.sleeper.com/projections/nfl/{season}/{week}?season_type={season_type}", timeout=5,
+        )  # type: ignore[return-value]

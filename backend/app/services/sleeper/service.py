@@ -3,12 +3,15 @@ from collections import defaultdict
 from dataclasses import dataclass
 from time import monotonic
 from .client import SleeperClient
+from .projections import starter_projection
 
 
 PLAYER_CACHE_SECONDS = 24 * 60 * 60
 _player_cache: dict[str, dict] | None = None
 _player_cache_expires_at = 0.0
 _player_cache_lock = asyncio.Lock()
+_projection_cache: dict[tuple[str, int, str], tuple[float, dict[str, dict]]] = {}
+_projection_cache_lock = asyncio.Lock()
 
 
 @dataclass(frozen=True)
@@ -264,3 +267,32 @@ class SleeperService:
     async def current_week(self) -> int:
         state = await self.client.state()
         return int(state["week"])
+
+    async def projected_matchup_scores(self, league_id: str, week: int, matchups: list[SleeperMatchup]) -> dict[int, float | None]:
+        league = await self.client.league(league_id)
+        season = str(league["season"])
+        season_type = league.get("season_type") or "regular"
+        if not season.isdigit() or season_type not in {"regular", "post", "pre"}:
+            return {}
+        key = (season, week, season_type)
+        async with _projection_cache_lock:
+            cached = _projection_cache.get(key)
+            if not cached or cached[0] <= monotonic():
+                rows = await self.client.projections(season, week, season_type)
+                stats = {str(row["player_id"]): row["stats"] for row in rows
+                         if isinstance(row, dict) and row.get("player_id") and isinstance(row.get("stats"), dict)
+                         and str(row.get("season")) == season and row.get("week") == week
+                         and row.get("season_type") == season_type}
+                # Never carry a projection into another week or season.
+                for old_key in list(_projection_cache):
+                    if _projection_cache[old_key][0] <= monotonic():
+                        del _projection_cache[old_key]
+                _projection_cache[key] = (monotonic() + 300, stats)
+            else:
+                stats = cached[1]
+        scoring = league.get("scoring_settings") or {}
+        return {
+            roster_id: starter_projection([player.player_id for player in starters], stats, scoring)
+            for matchup in matchups
+            for roster_id, starters in ((matchup.roster_a, matchup.team_a_starters), (matchup.roster_b, matchup.team_b_starters))
+        }

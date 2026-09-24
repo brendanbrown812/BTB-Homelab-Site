@@ -75,6 +75,8 @@ export function PredictionBoard() {
       <div className="w-full rounded-2xl border border-white/8 bg-white/[.035] p-4 md:w-[260px]"><div className="mb-2 flex justify-between text-sm"><span className="text-slate-400">Your card</span><span className="font-semibold text-white">{count} of {data.matchups.length} selected</span></div><Progress value={(count / data.matchups.length) * 100} className="h-2 bg-white/8 [&>div]:bg-primary" /></div>
     </section>
 
+    <p className="mb-5 text-xs leading-relaxed text-slate-500">Estimated projections use Sleeper’s weekly starter forecasts and available BTB scoring stats. They may omit custom bonuses and differ from live forecasts in Sleeper.</p>
+
     {error && <p role="alert" className="mb-5 rounded-xl bg-red-400/10 px-4 py-3 text-sm text-red-300">{error}</p>}
 
     {autosave.status === "error" && <p role="alert" className="mb-5 rounded-xl bg-red-400/10 px-4 py-3 text-sm text-red-300">{locked ? "Picks are locked. Your latest changes were not saved; only previously saved picks count." : `${saveError} Your selections are still here—retry to save them.`}</p>}
@@ -121,6 +123,10 @@ function TeamPanel({ team, locked, selected, onSelect, benchOpen, onToggleBench,
       <TeamAvatar url={team.avatar_url} initials={initials} selected={selected} />
       <span className="min-w-0 max-w-full sm:pr-7"><span className="line-clamp-2 min-h-8 text-xs font-bold leading-tight text-white sm:block sm:min-h-0 sm:truncate sm:text-[15px]">{team.name}</span><span className="mt-1 block truncate text-[10px] leading-tight text-slate-500 sm:text-xs">{team.owner} · {team.record}</span><span className={`mt-2 block text-[10px] font-semibold sm:text-xs ${selected ? "sr-only" : "text-slate-500"}`}>{selected ? "Your pick" : locked ? "Not selected" : "Select winner"}</span></span>
     </button>
+    <div className="grid grid-cols-2 gap-2 border-t border-white/7 bg-white/[.02] px-3 py-3 sm:px-5">
+      <div><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Actual</p><p className="mt-1 text-lg font-black tabular-nums text-slate-200">{team.score === null ? "—" : team.score.toFixed(2)}</p></div>
+      <div className="text-right"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Est. projected</p><p className="mt-1 text-lg font-black tabular-nums text-primary">{team.projected_score == null ? <span className="text-xs font-medium text-slate-500">Unavailable</span> : team.projected_score.toFixed(2)}</p></div>
+    </div>
     <div className="border-t border-white/7">
       <RosterSection label="Starters" players={team.starters ?? []} />
       <BenchSection players={team.bench ?? []} rosterId={team.roster_id} open={benchOpen} onToggle={onToggleBench} />
