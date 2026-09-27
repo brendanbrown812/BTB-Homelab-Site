@@ -115,6 +115,7 @@ class PollNotificationTests(unittest.IsolatedAsyncioTestCase):
         poll = Poll(question="Vote now", description="League decision", selection_mode=PollSelectionMode.single, closes_at=None)
         options = [PollOption(text="Yes", position=0), PollOption(text="No", position=1)]
         settings = SimpleNamespace(
+            disable_outbound_notifications=False,
             discord_poll_webhook_url="https://discord.com/api/webhooks/123/token",
             discord_poll_role_id="456",
             public_site_url="https://btb.example.com",

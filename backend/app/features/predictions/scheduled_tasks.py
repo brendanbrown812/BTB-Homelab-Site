@@ -75,7 +75,10 @@ async def send_prediction_deadline_reminder(
     now: datetime | None = None,
 ) -> dict:
     """Notify Discord when the current prediction card is about 12 hours from locking."""
-    if not get_settings().discord_predictions_webhook_url.strip():
+    settings = get_settings()
+    if getattr(settings, "disable_outbound_notifications", False):
+        return {"status": "skipped", "reason": "Outbound notifications are disabled"}
+    if not settings.discord_predictions_webhook_url.strip():
         return {"status": "skipped", "reason": "Discord predictions webhook is not configured"}
 
     _, week, _ = await _sync_current(db)

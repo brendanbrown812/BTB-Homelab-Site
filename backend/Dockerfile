@@ -1,6 +1,6 @@
 FROM python:3.13-slim
 WORKDIR /app
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 ENVIRONMENT=production LOCAL_CREATE_SCHEMA=false
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY alembic.ini ./

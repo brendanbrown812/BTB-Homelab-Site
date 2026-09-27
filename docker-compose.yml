@@ -18,6 +18,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
+      ENVIRONMENT: production
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-btb}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-btb}
       LOCAL_CREATE_SCHEMA: "false"
     depends_on:
@@ -34,12 +35,16 @@ services:
     command: ["python", "-m", "app.tasks.worker"]
     env_file: .env
     environment:
+      ENVIRONMENT: production
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-btb}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-btb}
       LOCAL_CREATE_SCHEMA: "false"
     depends_on:
       api: { condition: service_healthy }
   web:
-    build: .
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api}
     restart: unless-stopped
     depends_on: [api]
     ports: ["3007:3000"]

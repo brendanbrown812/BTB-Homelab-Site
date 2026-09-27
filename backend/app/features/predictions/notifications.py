@@ -16,6 +16,8 @@ def _is_discord_webhook_url(value: str) -> bool:
 
 async def send_prediction_deadline_notification() -> str:
     settings = get_settings()
+    if settings.disable_outbound_notifications:
+        return "disabled"
     webhook_url = settings.discord_predictions_webhook_url.strip()
     if not webhook_url:
         return "not_configured"

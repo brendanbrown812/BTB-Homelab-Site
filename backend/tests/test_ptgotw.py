@@ -13,6 +13,11 @@ from app.models.user import User, UserRole
 
 class PTGOTWTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        self.notification_patch = patch(
+            "app.features.ptgotw.routes.send_writeup_published_notification",
+            new=AsyncMock(return_value="disabled"),
+        )
+        self.notification_patch.start()
         self.engine = create_async_engine("sqlite+aiosqlite://")
         async with self.engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
@@ -20,6 +25,7 @@ class PTGOTWTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
+        self.notification_patch.stop()
 
     async def test_assignment_is_hidden_until_it_has_content(self):
         async with self.sessions() as db:
@@ -30,7 +36,8 @@ class PTGOTWTests(unittest.IsolatedAsyncioTestCase):
             listing = await list_writeups(year=2026, user=author, db=db)
             self.assertEqual(listing["writeups"], [])
 
-            await update_writeup(created["id"], WriteupUpdate(content_html="<script>bad()</script><p><strong>Game time</strong></p>", is_published=True), user=author, db=db)
+            published = await update_writeup(created["id"], WriteupUpdate(content_html="<script>bad()</script><p><strong>Game time</strong></p>", is_published=True), user=author, db=db)
+            self.assertEqual(published["notification_status"], "disabled")
             listing = await list_writeups(year=2026, user=author, db=db)
             self.assertEqual(len(listing["writeups"]), 1)
             writeup = await db.get(PTGWriteup, created["id"])
@@ -211,7 +218,8 @@ class PTGOTWTests(unittest.IsolatedAsyncioTestCase):
             await update_writeup(nearer["id"], WriteupUpdate(content_html="Published by admin", is_published=True), user=admin, db=db)
             self.assertIsNone(await upcoming_writeup(user=author, db=db))
             ready = await create_writeup(WriteupCreate(year=2026, week=12, author_id=author.id, submitted_by_author=True, due_date=today + timedelta(days=7)), admin=admin, db=db)
-            await update_writeup(ready["id"], WriteupUpdate(content_html="Published", is_published=True), user=author, db=db)
+            published = await update_writeup(ready["id"], WriteupUpdate(content_html="Published", is_published=True), user=author, db=db)
+            self.assertEqual(published["notification_status"], "disabled")
             edited = await update_writeup(ready["id"], WriteupUpdate(content_html="Edited after publishing", is_published=True), user=author, db=db)
             self.assertEqual(edited["content_html"], "Edited after publishing")
 

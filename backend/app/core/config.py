@@ -1,6 +1,12 @@
 from functools import lru_cache
-from pydantic import SecretStr
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+INSECURE_SECRET_KEYS = {
+    "change-me",
+    "replace-with-at-least-32-random-bytes",
+}
 
 
 class Settings(BaseSettings):
@@ -27,12 +33,27 @@ class Settings(BaseSettings):
     bootstrap_admin_password: str = ""
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
     public_site_url: str = "http://localhost:3000"
+    disable_outbound_notifications: bool = False
     discord_poll_webhook_url: str = ""
     discord_poll_role_id: str = ""
     discord_predictions_webhook_url: str = ""
     discord_ptgotw_webhook_url: str = ""
 
     model_config = SettingsConfigDict(env_file=(".env", "../.env"), extra="ignore")
+
+    @model_validator(mode="after")
+    def require_secure_production_secret(self):
+        environment = self.environment.strip().lower()
+        production_like = environment not in {"development", "test"} or not self.local_create_schema
+        secret = self.secret_key.strip()
+        if production_like and (
+            len(secret) < 32 or secret.lower() in INSECURE_SECRET_KEYS
+        ):
+            raise ValueError(
+                "SECRET_KEY must be a non-placeholder value containing at least 32 characters "
+                "when running outside local development"
+            )
+        return self
 
 
 @lru_cache

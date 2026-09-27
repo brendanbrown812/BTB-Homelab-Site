@@ -11,6 +11,7 @@ class PTGOTWNotificationTests(unittest.IsolatedAsyncioTestCase):
     async def test_discord_notification_links_directly_to_writeup(self):
         writeup = PTGWriteup(id=uuid.uuid4(), year=2026, week=4)
         settings = SimpleNamespace(
+            disable_outbound_notifications=False,
             discord_ptgotw_webhook_url="https://discord.com/api/webhooks/123/token",
             public_site_url="https://btb.example.com/",
         )
@@ -36,6 +37,22 @@ class PTGOTWNotificationTests(unittest.IsolatedAsyncioTestCase):
             f"The Writer has published their week 4 writeup. Read it here: https://btb.example.com/ptgotw/{writeup.id}",
         )
         self.assertEqual(request.kwargs["json"]["allowed_mentions"], {"parse": []})
+
+    async def test_notifications_disabled_never_constructs_an_http_client(self):
+        writeup = PTGWriteup(id=uuid.uuid4(), year=2026, week=4)
+        settings = SimpleNamespace(
+            disable_outbound_notifications=True,
+            discord_ptgotw_webhook_url="https://discord.com/api/webhooks/real-looking/token",
+            public_site_url="https://btb.example.com/",
+        )
+
+        with patch(
+            "app.features.ptgotw.notifications.get_settings", return_value=settings,
+        ), patch("app.features.ptgotw.notifications.httpx.AsyncClient") as client:
+            result = await send_writeup_published_notification(writeup, "The Writer")
+
+        self.assertEqual(result, "disabled")
+        client.assert_not_called()
 
 
 if __name__ == "__main__":

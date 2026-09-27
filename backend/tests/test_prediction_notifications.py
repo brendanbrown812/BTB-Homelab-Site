@@ -8,6 +8,7 @@ from app.features.predictions.notifications import send_prediction_deadline_noti
 class PredictionNotificationTests(unittest.IsolatedAsyncioTestCase):
     async def test_discord_reminder_links_directly_to_predictions(self):
         settings = SimpleNamespace(
+            disable_outbound_notifications=False,
             discord_predictions_webhook_url="https://discord.com/api/webhooks/123/token",
             public_site_url="https://btb.example.com/",
         )
@@ -36,6 +37,7 @@ class PredictionNotificationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_invalid_webhook_url_fails_before_request(self):
         settings = SimpleNamespace(
+            disable_outbound_notifications=False,
             discord_predictions_webhook_url="https://example.com/not-discord",
             public_site_url="https://btb.example.com",
         )
