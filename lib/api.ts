@@ -27,6 +27,15 @@ export type ScheduledTaskState = {
   last_status: "running" | "succeeded" | "failed" | "skipped" | null;
   consecutive_failures: number;
   last_error: string | null;
+  last_run: {
+    id: string;
+    scheduled_for: string;
+    started_at: string;
+    finished_at: string | null;
+    status: "running" | "succeeded" | "failed" | "skipped";
+    result: Record<string, unknown> | null;
+    error: string | null;
+  } | null;
 };
 export type WriteupDraft = {
   content_html: string;

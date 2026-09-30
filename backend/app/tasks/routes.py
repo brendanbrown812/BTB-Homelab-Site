@@ -18,8 +18,15 @@ router = APIRouter(
 @router.get("")
 async def list_tasks(db: AsyncSession = Depends(get_db)):
     tasks = (await db.scalars(select(ScheduledTask).order_by(ScheduledTask.task_key))).all()
-    return [
-        {
+    payload = []
+    for task in tasks:
+        last_run = await db.scalar(
+            select(ScheduledTaskRun)
+            .where(ScheduledTaskRun.task_key == task.task_key)
+            .order_by(ScheduledTaskRun.started_at.desc())
+            .limit(1)
+        )
+        payload.append({
             "key": task.task_key,
             "description": task.description,
             "schedule": task.schedule,
@@ -30,9 +37,17 @@ async def list_tasks(db: AsyncSession = Depends(get_db)):
             "last_status": task.last_status.value if task.last_status else None,
             "consecutive_failures": task.consecutive_failures,
             "last_error": task.last_error,
-        }
-        for task in tasks
-    ]
+            "last_run": ({
+                "id": last_run.id,
+                "scheduled_for": last_run.scheduled_for,
+                "started_at": last_run.started_at,
+                "finished_at": last_run.finished_at,
+                "status": last_run.status.value,
+                "result": last_run.result,
+                "error": last_run.error,
+            } if last_run else None),
+        })
+    return payload
 
 
 @router.get("/runs")

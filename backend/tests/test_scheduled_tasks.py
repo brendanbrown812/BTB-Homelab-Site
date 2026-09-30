@@ -17,7 +17,7 @@ from app.models.season import Season
 from app.models.user import User, UserRole
 from app.tasks.models import ScheduledTask, ScheduledTaskRun, ScheduledTaskRunStatus
 from app.tasks.runner import claim_next_due_task, run_due_tasks_once, sync_task_definitions
-from app.tasks.routes import router as task_router
+from app.tasks.routes import list_tasks, router as task_router
 from app.tasks.schedules import WeeklySchedule
 
 
@@ -82,6 +82,37 @@ class ScheduledTaskRunnerTests(unittest.IsolatedAsyncioTestCase):
         for route in task_router.routes:
             dependency_calls = {dependency.call for dependency in route.dependant.dependencies}
             self.assertIn(admin_user, dependency_calls, route.path)
+
+    async def test_task_list_includes_the_latest_run_result(self):
+        now = datetime(2026, 9, 29, 12, tzinfo=timezone.utc)
+        async with self.sessions() as db:
+            await sync_task_definitions(db, now)
+            db.add_all([
+                ScheduledTaskRun(
+                    task_key="league_history.refresh_active_sleeper",
+                    scheduled_for=now - timedelta(days=7),
+                    started_at=now - timedelta(days=7),
+                    finished_at=now - timedelta(days=7) + timedelta(minutes=1),
+                    status=ScheduledTaskRunStatus.succeeded,
+                    result={"completed_through_week": 2},
+                ),
+                ScheduledTaskRun(
+                    task_key="league_history.refresh_active_sleeper",
+                    scheduled_for=now,
+                    started_at=now,
+                    finished_at=now + timedelta(minutes=1),
+                    status=ScheduledTaskRunStatus.succeeded,
+                    result={"completed_through_week": 3, "matchups": 18},
+                ),
+            ])
+            await db.commit()
+
+            payload = await list_tasks(db)
+
+            history = next(item for item in payload if item["key"] == "league_history.refresh_active_sleeper")
+            self.assertEqual(history["last_run"]["status"], "succeeded")
+            self.assertEqual(history["last_run"]["result"]["completed_through_week"], 3)
+            self.assertEqual(history["last_run"]["result"]["matchups"], 18)
 
     async def test_claim_uses_a_lease_and_creates_a_run(self):
         due = datetime(2026, 9, 15, 12, tzinfo=timezone.utc)
