@@ -39,7 +39,9 @@ async def sync_task_definitions(db: AsyncSession, now: datetime | None = None) -
                     task_key=definition.key,
                     description=definition.description,
                     schedule=definition.schedule.label,
-                    next_run_at=definition.schedule.next_after(now),
+                    next_run_at=(
+                        now if definition.run_on_registration else definition.schedule.next_after(now)
+                    ),
                 )
             )
     await db.commit()

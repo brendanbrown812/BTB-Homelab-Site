@@ -5,7 +5,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.features.league_history.sleeper_importer import import_sleeper_season
 from app.features.predictions.models import PredictionWeek, WeekStatus
 from app.features.predictions.notifications import send_prediction_deadline_notification
 from app.features.predictions.operations import finalize_prediction_week, refresh_prediction_week
@@ -14,7 +13,7 @@ from app.models.season import Season, SeasonPlatform
 
 
 async def auto_finalize_prediction_weeks(db: AsyncSession) -> dict:
-    """Finalize due prediction weeks and refresh the active season's league history."""
+    """Refresh and finalize due prediction weeks."""
     now = datetime.now(timezone.utc)
     season = await db.scalar(
         select(Season)
@@ -55,17 +54,10 @@ async def auto_finalize_prediction_weeks(db: AsyncSession) -> dict:
             raise RuntimeError(f"Week {week.week_number} could not be finalized: {exc.detail}") from exc
         finalized.append(week.week_number)
 
-    history_result = await import_sleeper_season(db, season.id)
-    history_status = str(history_result.get("status") or "unknown")
-    if history_status != "succeeded":
-        raise RuntimeError(f"Current-season history sync finished with status {history_status}")
-
     return {
         "status": "succeeded",
         "weeks_finalized": finalized,
         "matchups_refreshed": refreshed_matchups,
-        "history_sync": history_status,
-        "history_matchups": history_result.get("counts", {}).get("matchups", 0),
     }
 
 

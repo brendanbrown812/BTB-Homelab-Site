@@ -4,6 +4,7 @@ from datetime import time
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.features.league_history.scheduled_tasks import refresh_active_sleeper_history
 from app.features.predictions.scheduled_tasks import (
     auto_finalize_prediction_weeks,
     send_prediction_deadline_reminder,
@@ -20,12 +21,20 @@ class TaskDefinition:
     description: str
     schedule: WeeklySchedule
     handler: TaskHandler
+    run_on_registration: bool = False
 
 
 TASK_DEFINITIONS = (
     TaskDefinition(
+        key="league_history.refresh_active_sleeper",
+        description="Import completed games for the active Sleeper season",
+        schedule=WeeklySchedule(weekday=1, at=time(7, 0), timezone_name="America/Chicago"),
+        handler=refresh_active_sleeper_history,
+        run_on_registration=True,
+    ),
+    TaskDefinition(
         key="predictions.auto_finalize",
-        description="Finalize prediction weeks and sync current-season history after the NFL week ends",
+        description="Finalize prediction weeks after the NFL week ends",
         schedule=WeeklySchedule(weekday=1, at=time(7, 0), timezone_name="America/Chicago"),
         handler=auto_finalize_prediction_weeks,
     ),

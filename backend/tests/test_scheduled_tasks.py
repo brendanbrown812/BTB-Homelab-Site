@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.auth.dependencies import admin_user
 from app.database.base import Base
+from app.features.league_history.scheduled_tasks import refresh_active_sleeper_history
 from app.features.predictions.models import PredictionMatchup, PredictionWeek, WeekStatus
 from app.features.predictions.scheduled_tasks import (
     auto_finalize_prediction_weeks,
@@ -61,7 +62,10 @@ class ScheduledTaskRunnerTests(unittest.IsolatedAsyncioTestCase):
         async with self.sessions() as db:
             await sync_task_definitions(db, now)
             task = await db.get(ScheduledTask, "predictions.auto_finalize")
+            history = await db.get(ScheduledTask, "league_history.refresh_active_sleeper")
             reminder = await db.get(ScheduledTask, "predictions.deadline_reminder")
+            self.assertEqual(history.schedule, "Tuesday 07:00 America/Chicago")
+            self.assertEqual(history.next_run_at, now.replace(tzinfo=None))
             self.assertEqual(task.schedule, "Tuesday 07:00 America/Chicago")
             self.assertEqual(task.next_run_at, datetime(2026, 9, 15, 12))
             self.assertEqual(reminder.schedule, "Thursday 07:00 America/Chicago")
@@ -86,10 +90,16 @@ class ScheduledTaskRunnerTests(unittest.IsolatedAsyncioTestCase):
             claim = await claim_next_due_task(db, now=due, lease_seconds=60)
             self.assertIsNotNone(claim)
             second = await claim_next_due_task(db, now=due, lease_seconds=60)
-            self.assertIsNone(second)
+            self.assertIsNotNone(second)
+            third = await claim_next_due_task(db, now=due, lease_seconds=60)
+            self.assertIsNone(third)
+            self.assertEqual(
+                {claim.definition.key, second.definition.key},
+                {"league_history.refresh_active_sleeper", "predictions.auto_finalize"},
+            )
             runs = (await db.scalars(select(ScheduledTaskRun))).all()
-            self.assertEqual(len(runs), 1)
-            self.assertEqual(runs[0].status, ScheduledTaskRunStatus.running)
+            self.assertEqual(len(runs), 2)
+            self.assertTrue(all(run.status is ScheduledTaskRunStatus.running for run in runs))
 
     async def test_success_is_audited_and_advances_the_schedule(self):
         due = datetime.now(timezone.utc) - timedelta(minutes=1)
@@ -182,21 +192,14 @@ class PredictionAutoFinalizeTests(unittest.IsolatedAsyncioTestCase):
             with patch(
                 "app.features.predictions.scheduled_tasks.refresh_prediction_week",
                 new=AsyncMock(return_value=1),
-            ) as refresh, patch(
-                "app.features.predictions.scheduled_tasks.import_sleeper_season",
-                new=AsyncMock(return_value={"status": "succeeded", "counts": {"matchups": 6}}),
-            ) as history_sync:
+            ) as refresh:
                 first = await auto_finalize_prediction_weeks(db)
                 await db.commit()
                 second = await auto_finalize_prediction_weeks(db)
 
             self.assertEqual(first["weeks_finalized"], [1])
-            self.assertEqual(first["history_sync"], "succeeded")
-            self.assertEqual(first["history_matchups"], 6)
             self.assertEqual(second["weeks_finalized"], [])
             self.assertEqual(refresh.await_count, 1)
-            self.assertEqual(history_sync.await_count, 2)
-            history_sync.assert_awaited_with(db, season.id)
             self.assertEqual(week.status, WeekStatus.final)
 
     async def test_future_and_inactive_season_weeks_are_not_finalized(self):
@@ -218,15 +221,10 @@ class PredictionAutoFinalizeTests(unittest.IsolatedAsyncioTestCase):
             db.add_all([future, old])
             await db.commit()
 
-            with patch(
-                "app.features.predictions.scheduled_tasks.import_sleeper_season",
-                new=AsyncMock(return_value={"status": "succeeded", "counts": {"matchups": 4}}),
-            ) as history_sync:
-                result = await auto_finalize_prediction_weeks(db)
+            result = await auto_finalize_prediction_weeks(db)
 
             self.assertEqual(result["status"], "succeeded")
             self.assertEqual(result["weeks_finalized"], [])
-            history_sync.assert_awaited_once_with(db, active.id)
             self.assertEqual(future.status, WeekStatus.open)
             self.assertEqual(old.status, WeekStatus.open)
 
@@ -246,30 +244,40 @@ class PredictionAutoFinalizeTests(unittest.IsolatedAsyncioTestCase):
             with patch(
                 "app.features.predictions.scheduled_tasks.refresh_prediction_week",
                 new=AsyncMock(return_value=0),
-            ), patch(
-                "app.features.predictions.scheduled_tasks.import_sleeper_season",
-                new=AsyncMock(),
-            ) as history_sync:
+            ):
                 with self.assertRaisesRegex(RuntimeError, "returned no matchups"):
                     await auto_finalize_prediction_weeks(db)
 
-            history_sync.assert_not_awaited()
             self.assertEqual(week.status, WeekStatus.open)
 
-    async def test_history_sync_failure_is_raised_even_after_week_was_already_finalized(self):
+    async def test_active_sleeper_history_is_refreshed_independently(self):
         async with self.sessions() as db:
             season = Season(year=2026, sleeper_league_id="league", is_active=True)
             db.add(season)
             await db.commit()
 
             with patch(
-                "app.features.predictions.scheduled_tasks.import_sleeper_season",
-                new=AsyncMock(return_value={"status": "needs_attention", "counts": {}}),
+                "app.features.league_history.scheduled_tasks.import_sleeper_season",
+                new=AsyncMock(return_value={"status": "succeeded", "counts": {"matchups": 18}}),
             ) as history_sync:
-                with self.assertRaisesRegex(RuntimeError, "needs_attention"):
-                    await auto_finalize_prediction_weeks(db)
+                result = await refresh_active_sleeper_history(db)
 
             history_sync.assert_awaited_once_with(db, season.id)
+            self.assertEqual(result["status"], "succeeded")
+            self.assertEqual(result["matchups"], 18)
+
+    async def test_active_sleeper_history_failure_is_raised_for_retry(self):
+        async with self.sessions() as db:
+            season = Season(year=2026, sleeper_league_id="league", is_active=True)
+            db.add(season)
+            await db.commit()
+
+            with patch(
+                "app.features.league_history.scheduled_tasks.import_sleeper_season",
+                new=AsyncMock(return_value={"status": "needs_attention", "counts": {}}),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "needs_attention"):
+                    await refresh_active_sleeper_history(db)
 
 
 class PredictionDeadlineReminderTests(unittest.IsolatedAsyncioTestCase):
