@@ -258,13 +258,17 @@ class PredictionAutoFinalizeTests(unittest.IsolatedAsyncioTestCase):
 
             with patch(
                 "app.features.league_history.scheduled_tasks.import_sleeper_season",
-                new=AsyncMock(return_value={"status": "succeeded", "counts": {"matchups": 18}}),
+                new=AsyncMock(return_value={
+                    "status": "succeeded",
+                    "counts": {"matchups": 18, "completed_through_week": 3},
+                }),
             ) as history_sync:
                 result = await refresh_active_sleeper_history(db)
 
             history_sync.assert_awaited_once_with(db, season.id)
             self.assertEqual(result["status"], "succeeded")
             self.assertEqual(result["matchups"], 18)
+            self.assertEqual(result["completed_through_week"], 3)
 
     async def test_active_sleeper_history_failure_is_raised_for_retry(self):
         async with self.sessions() as db:

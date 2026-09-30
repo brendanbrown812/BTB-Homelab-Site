@@ -159,6 +159,58 @@ class SleeperImporterTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(run.status, ImportRunStatus.succeeded)
             self.assertEqual(run.counts["mode"], "dry_run")
 
+    async def test_roster_records_mark_current_leg_complete_after_scores_finalize(self):
+        async with self.sessions() as db:
+            season, _ = await self._seed(db)
+            value = archive()
+            week_three = tuple({**row, "points": float(row["points"]) + 3} for row in value.matchups_by_week[1])
+            current = SleeperLeagueArchive(
+                league={**value.league, "settings": {"leg": 3}},
+                users=value.users,
+                rosters=tuple({
+                    **roster,
+                    "settings": {"wins": 2, "losses": 1, "ties": 0},
+                } for roster in value.rosters),
+                matchups_by_week={3: week_three},
+                transactions_by_round=value.transactions_by_round,
+                winners_bracket=value.winners_bracket,
+                losers_bracket=value.losers_bracket,
+            )
+
+            result = await import_sleeper_season(db, season.id, sleeper=FakeSleeperService(current))
+
+            matchups = (await db.scalars(select(LeagueMatchup))).all()
+            self.assertEqual(result["counts"]["completed_through_week"], 3)
+            self.assertEqual(len(matchups), 2)
+            self.assertTrue(all(matchup.week == 3 for matchup in matchups))
+            self.assertTrue(all(matchup.source_metadata["is_complete"] for matchup in matchups))
+
+    async def test_current_leg_stays_incomplete_until_every_roster_record_advances(self):
+        async with self.sessions() as db:
+            season, _ = await self._seed(db)
+            value = archive()
+            rosters = []
+            for index, roster in enumerate(value.rosters):
+                games = 2 if index == 0 else 3
+                rosters.append({
+                    **roster,
+                    "settings": {"wins": games, "losses": 0, "ties": 0},
+                })
+            current = SleeperLeagueArchive(
+                league={**value.league, "settings": {"leg": 3}},
+                users=value.users,
+                rosters=tuple(rosters),
+                matchups_by_week={3: value.matchups_by_week[1]},
+                transactions_by_round=value.transactions_by_round,
+                winners_bracket=value.winners_bracket,
+                losers_bracket=value.losers_bracket,
+            )
+
+            await import_sleeper_season(db, season.id, sleeper=FakeSleeperService(current))
+
+            matchups = (await db.scalars(select(LeagueMatchup))).all()
+            self.assertTrue(all(matchup.source_metadata["is_complete"] is False for matchup in matchups))
+
     async def test_unresolved_identity_marks_attention_and_aborts_season(self):
         async with self.sessions() as db:
             season, _ = await self._seed(db, missing_alias=True)

@@ -29,6 +29,26 @@ class SleeperImportError(Exception):
     pass
 
 
+def _completed_week_from_roster_records(league: dict, rosters: tuple[dict, ...]) -> int | None:
+    """Infer the last finalized week when Sleeper's league leg has not advanced yet."""
+    games_played: list[int] = []
+    for roster in rosters:
+        settings = roster.get("settings") or {}
+        if not any(key in settings for key in ("wins", "losses", "ties")):
+            return None
+        games_played.append(
+            int(settings.get("wins") or 0)
+            + int(settings.get("losses") or 0)
+            + int(settings.get("ties") or 0)
+        )
+    if not games_played:
+        return None
+
+    league_settings = league.get("settings") or {}
+    games_per_week = 2 if int(league_settings.get("league_average_match") or 0) else 1
+    return min(games_played) // games_per_week
+
+
 def _team_name(user: dict, roster_id: int) -> str:
     metadata = user.get("metadata") or {}
     return str(metadata.get("team_name") or user.get("display_name") or f"Roster {roster_id}")
@@ -273,6 +293,8 @@ async def import_sleeper_season(
         matchup_by_key = {item.source_key: item for item in existing_matchups}
         current_leg_value = (archive.league.get("settings") or {}).get("leg")
         current_leg = int(current_leg_value) if current_leg_value is not None else None
+        completed_record_week = _completed_week_from_roster_records(archive.league, archive.rosters)
+        counts["completed_through_week"] = completed_record_week
         for week, matchup_id, row_a, row_b in matchup_pairs:
             roster_a, roster_b = int(row_a["roster_id"]), int(row_b["roster_id"])
             manager_a, _, name_a = roster_rows[roster_a]
@@ -291,8 +313,15 @@ async def import_sleeper_season(
             source_metadata = {"team_a": row_a, "team_b": row_b}
             if league_status in {"complete", "completed"}:
                 source_metadata["is_complete"] = True
-            elif current_leg is not None:
-                source_metadata["is_complete"] = week < current_leg
+            elif current_leg is not None or completed_record_week is not None:
+                leg_is_complete = current_leg is not None and week < current_leg
+                record_is_complete = (
+                    completed_record_week is not None
+                    and week <= completed_record_week
+                    and row_a.get("points") is not None
+                    and row_b.get("points") is not None
+                )
+                source_metadata["is_complete"] = leg_is_complete or record_is_complete
             item.source_metadata = source_metadata
 
         existing_transactions = (await db.scalars(select(LeagueTransaction).where(

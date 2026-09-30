@@ -30,4 +30,5 @@ async def refresh_active_sleeper_history(db: AsyncSession) -> dict:
         "season_id": str(season.id),
         "season_year": season.year,
         "matchups": counts.get("matchups", 0),
+        "completed_through_week": counts.get("completed_through_week"),
     }
