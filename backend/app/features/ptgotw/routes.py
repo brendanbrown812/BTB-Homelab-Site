@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import admin_user, current_user
 from app.database.session import get_db
-from app.features.ptgotw.models import PTGWriteup, PTGWriteupComment
+from app.features.ptgotw.models import PTGRankingCandidate, PTGWriteup, PTGWriteupComment
 from app.features.ptgotw.notifications import send_writeup_published_notification
 from app.models.user import User, UserRole
 
@@ -161,6 +161,12 @@ async def _author_name(db: AsyncSession, author_id: uuid.UUID) -> str:
     if not name:
         raise HTTPException(status_code=404, detail="Writeup author not found")
     return name
+
+
+async def _is_frozen_ranking_candidate(db: AsyncSession, writeup_id: uuid.UUID) -> bool:
+    return await db.scalar(
+        select(PTGRankingCandidate.id).where(PTGRankingCandidate.writeup_id == writeup_id)
+    ) is not None
 
 
 def _payload(writeup: PTGWriteup, author_name: str, viewer: User, include_content: bool = True, editing: bool = False) -> dict:
@@ -343,9 +349,14 @@ async def delete_comment(writeup_id: uuid.UUID, comment_id: uuid.UUID, admin: Us
 
 @router.delete("/{writeup_id}", status_code=204)
 async def delete_writeup(writeup_id: uuid.UUID, _: User = Depends(admin_user), db: AsyncSession = Depends(get_db)):
-    writeup = await db.get(PTGWriteup, writeup_id)
+    writeup = await db.get(PTGWriteup, writeup_id, with_for_update=True)
     if not writeup:
         raise HTTPException(status_code=404, detail="Writeup not found")
+    if await _is_frozen_ranking_candidate(db, writeup_id):
+        raise HTTPException(
+            status_code=409,
+            detail="This writeup is frozen in a ranking period and cannot be deleted",
+        )
     await db.delete(writeup)
     await db.commit()
 
@@ -360,7 +371,7 @@ async def get_writeup(writeup_id: uuid.UUID, user: User = Depends(current_user),
 
 @router.put("/{writeup_id}")
 async def update_writeup(writeup_id: uuid.UUID, body: WriteupUpdate, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
-    writeup = await db.get(PTGWriteup, writeup_id)
+    writeup = await db.get(PTGWriteup, writeup_id, with_for_update=True)
     if not writeup:
         raise HTTPException(status_code=404, detail="Writeup not found")
     is_admin = user.role is UserRole.admin
@@ -368,6 +379,18 @@ async def update_writeup(writeup_id: uuid.UUID, body: WriteupUpdate, user: User 
         raise HTTPException(status_code=403, detail="You do not have permission to edit this writeup")
     if not is_admin and body.is_published is True and not writeup.is_published and not _author_publish_window_open(writeup):
         raise HTTPException(status_code=403, detail="You can publish this writeup starting seven days before its due date")
+    frozen_candidate = await _is_frozen_ranking_candidate(db, writeup_id)
+    changes_frozen_identity = (
+        (body.year is not None and body.year != writeup.year)
+        or (body.week is not None and body.week != writeup.week)
+        or (body.author_id is not None and body.author_id != writeup.author_id)
+        or body.is_published is False
+    )
+    if frozen_candidate and changes_frozen_identity:
+        raise HTTPException(
+            status_code=409,
+            detail="This writeup's year, week, author, and published status are frozen for ranking",
+        )
     if is_admin:
         if body.year is not None:
             writeup.year = body.year

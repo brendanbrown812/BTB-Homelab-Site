@@ -64,6 +64,52 @@ export type PTGWriteupList = {
   available_years: number[];
   writeups: Array<Omit<PTGWriteup, "content_html">>;
 };
+export type PTGRankingWriteup = Omit<PTGWriteup, "content_html" | "draft" | "submitted_by_author" | "due_date" | "is_published" | "has_content">;
+export type PTGRankingState = {
+  year: number;
+  state: "preparing" | "open" | "closed";
+  closes_at: string | null;
+  can_edit: boolean;
+  can_submit: boolean;
+  ballot_status: "not_started" | "draft" | "submitted";
+  revision: number;
+  submitted_at: string | null;
+  writeups: PTGRankingWriteup[];
+};
+export type PTGRankingManagerStatus = {
+  user_id: string;
+  display_name: string;
+  last_active_at: string | null;
+  status: "not_started" | "draft" | "submitted";
+  revision: number;
+  updated_at: string | null;
+  submitted_at: string | null;
+  writeups: PTGRankingWriteup[];
+};
+export type PTGRankingResult = {
+  writeup_id: string;
+  week: number;
+  author: { id: string; display_name: string };
+  points: number;
+  placement_votes: [number, number, number, number, number];
+  ballot_count: number;
+  rank: number;
+  top_five_appearances: number;
+  average_rank: number | null;
+};
+export type AdminPTGRankingState = {
+  year: number;
+  state: "preparing" | "open" | "closed";
+  accepting_submissions: boolean;
+  closes_at: string | null;
+  opened_at: string | null;
+  closed_at: string | null;
+  available_years: number[];
+  candidate_count: number;
+  managers: PTGRankingManagerStatus[];
+  submitted_results: PTGRankingResult[];
+  all_saved_results: PTGRankingResult[];
+};
 export type UpcomingWriteup = { id: string; year: number; week: number; due_date: string; days_remaining: number };
 export type PTGComment = {
   id: string;

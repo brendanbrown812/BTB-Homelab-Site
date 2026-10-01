@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeftRight, BarChart3, BookOpenText, CalendarClock, CalendarDays, ChevronDown, ClipboardCheck, FilePenLine, History, Home, Library, ListPlus, LogOut, Menu, ShieldCheck, Sparkles, Swords, Trophy, UsersRound, Vote, X } from "lucide-react";
+import { ArrowLeftRight, BarChart3, BookOpenText, CalendarClock, CalendarDays, ChevronDown, ClipboardCheck, FilePenLine, History, Home, Library, ListChecks, ListOrdered, ListPlus, LogOut, Menu, ShieldCheck, Sparkles, Swords, Trophy, UsersRound, Vote, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
@@ -46,16 +46,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   function logout() { localStorage.removeItem("btb_access_token"); router.replace("/login"); }
   if (!user) return <main className="grid min-h-screen place-items-center"><div className="text-center"><span className="mx-auto mb-4 grid h-11 w-11 animate-pulse place-items-center rounded-[14px] bg-primary font-black text-primary-foreground">BTB</span><p className="text-sm text-slate-500">Checking your account…</p></div></main>;
 
-  const itemClass = (href: string) => `flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] transition ${path === href || (href === "/ptgotw" && path.startsWith("/ptgotw/") && path !== "/ptgotw/submit") || (href.startsWith("/league/") && path.startsWith(`${href}/`)) ? "bg-primary font-semibold text-primary-foreground" : "text-slate-400 hover:bg-white/5 hover:text-white"}`;
+  const itemClass = (href: string) => `flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] transition ${path === href || (href === "/ptgotw" && path.startsWith("/ptgotw/") && path !== "/ptgotw/submit" && path !== "/ptgotw/rankings") || (href.startsWith("/league/") && path.startsWith(`${href}/`)) ? "bg-primary font-semibold text-primary-foreground" : "text-slate-400 hover:bg-white/5 hover:text-white"}`;
   const nav = <>
     <NavSection label="Predictions" expanded={predictionsExpanded} onToggle={() => setPredictionsExpanded(value => !value)} />
     {predictionsExpanded && predictionItems.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setOpen(false)} className={itemClass(href)}><Icon className="h-[18px] w-[18px]" />{label}</Link>)}
     <NavSection label="PTGOTW" expanded={ptgotwExpanded} onToggle={() => setPtgotwExpanded(value => !value)} />
-    {ptgotwExpanded && <><Link href="/ptgotw" onClick={() => setOpen(false)} className={itemClass("/ptgotw")}><BookOpenText className="h-[18px] w-[18px]" />Writeups</Link>{canSubmitWriteup && <Link href="/ptgotw/submit" onClick={() => setOpen(false)} className={itemClass("/ptgotw/submit")}><FilePenLine className="h-[18px] w-[18px]" />Submit writeup</Link>}</>}
+    {ptgotwExpanded && <><Link href="/ptgotw" onClick={() => setOpen(false)} className={itemClass("/ptgotw")}><BookOpenText className="h-[18px] w-[18px]" />Writeups</Link>{user.role === "user" && <Link href="/ptgotw/rankings" onClick={() => setOpen(false)} className={itemClass("/ptgotw/rankings")}><ListOrdered className="h-[18px] w-[18px]" />Rank writeups</Link>}{canSubmitWriteup && <Link href="/ptgotw/submit" onClick={() => setOpen(false)} className={itemClass("/ptgotw/submit")}><FilePenLine className="h-[18px] w-[18px]" />Submit writeup</Link>}</>}
     <NavSection label="League" expanded={leagueExpanded} onToggle={() => setLeagueExpanded(value => !value)} />
     {leagueExpanded && leagueItems.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setOpen(false)} className={itemClass(href)}><Icon className="h-[18px] w-[18px]" />{label}</Link>)}
     <div className="mt-6 border-t border-white/8 pt-4"><Link href="/polls" onClick={() => setOpen(false)} className={itemClass("/polls")}><Vote className="h-[18px] w-[18px]" />Polls</Link></div>
-    {user.role === "admin" && <div className="mt-2 space-y-1"><Link href="/admin" onClick={() => setOpen(false)} className={itemClass("/admin")}><ShieldCheck className="h-[18px] w-[18px]" />Admin</Link><Link href="/admin/submissions" onClick={() => setOpen(false)} className={itemClass("/admin/submissions")}><ClipboardCheck className="h-[18px] w-[18px]" />Pick status</Link></div>}
+    {user.role === "admin" && <div className="mt-2 space-y-1"><Link href="/admin" onClick={() => setOpen(false)} className={itemClass("/admin")}><ShieldCheck className="h-[18px] w-[18px]" />Admin</Link><Link href="/admin/submissions" onClick={() => setOpen(false)} className={itemClass("/admin/submissions")}><ClipboardCheck className="h-[18px] w-[18px]" />Pick status</Link><Link href="/admin/rankings" onClick={() => setOpen(false)} className={itemClass("/admin/rankings")}><ListChecks className="h-[18px] w-[18px]" />Ranking status</Link></div>}
   </>;
 
   return <div className="min-h-screen lg:grid lg:grid-cols-[245px_1fr]">

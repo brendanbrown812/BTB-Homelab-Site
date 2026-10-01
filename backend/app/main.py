@@ -10,6 +10,8 @@ from app.database.session import SessionLocal, engine
 from app.features.predictions.routes import router as predictions_router
 from app.features.predictions.admin_routes import router as admin_predictions_router
 from app.features.ptgotw.routes import router as ptgotw_router
+from app.features.ptgotw.ranking_routes import admin_router as admin_ptgotw_ranking_router
+from app.features.ptgotw.ranking_routes import router as ptgotw_ranking_router
 from app.features.polls.routes import router as polls_router
 from app.features.league_history import models as league_history_models  # noqa: F401
 from app.features.league_history.routes import admin_router as admin_league_history_router
@@ -157,6 +159,8 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(predictions_router, prefix="/api")
 app.include_router(admin_predictions_router, prefix="/api")
+app.include_router(ptgotw_ranking_router, prefix="/api")
+app.include_router(admin_ptgotw_ranking_router, prefix="/api")
 app.include_router(ptgotw_router, prefix="/api")
 app.include_router(polls_router, prefix="/api")
 app.include_router(admin_league_history_router, prefix="/api")

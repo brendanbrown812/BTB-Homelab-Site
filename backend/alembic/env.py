@@ -7,7 +7,13 @@ from app.database.base import Base
 from app.models.user import User  # noqa: F401
 from app.models.season import Season  # noqa: F401
 from app.features.predictions.models import Prediction, PredictionMatchup, PredictionWeek  # noqa: F401
-from app.features.ptgotw.models import PTGWriteup  # noqa: F401
+from app.features.ptgotw.models import (  # noqa: F401
+    PTGRankingBallot,
+    PTGRankingCandidate,
+    PTGRankingItem,
+    PTGRankingPeriod,
+    PTGWriteup,
+)
 from app.features.polls.models import Poll, PollOption, PollVote  # noqa: F401
 from app.features.league_history import models as league_history_models  # noqa: F401
 from app.tasks import models as task_models  # noqa: F401

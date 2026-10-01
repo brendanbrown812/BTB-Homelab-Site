@@ -11,10 +11,14 @@
     "build": "node scripts/run-framework.mjs build",
     "start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 0.0.0.0 --port 3000 --inspector-port 0",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "test:ranking": "node --test scripts/ptgotw-ranking.test.mjs",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
+    "@dnd-kit/core": "6.3.1",
+    "@dnd-kit/sortable": "10.0.0",
+    "@dnd-kit/utilities": "3.2.2",
     "@hookform/resolvers": "^5.7.1",
     "@shadcn/react": "^0.3.0",
     "class-variance-authority": "0.7.1",
@@ -40,15 +44,15 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.60.2",
-    "@cloudflare/workers-types": "5.20260927.1",
+    "@cloudflare/vite-plugin": "1.62.3",
+    "@cloudflare/workers-types": "5.20261001.1",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.34",
-    "drizzle-kit": "0.31.10",
+    "drizzle-kit": "0.31.11",
     "eslint": "9.39.4",
     "eslint-config-next": "16.3.6",
     "react-server-dom-webpack": "19.2.8",
@@ -57,7 +61,12 @@
     "typescript": "5.9.3",
     "vinext": "1.0.0-beta.9",
     "vite": "8.3.1",
-    "wrangler": "4.141.0"
+    "wrangler": "4.145.0"
+  },
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "0.25.12"
+    }
   },
   "type": "module"
 }
