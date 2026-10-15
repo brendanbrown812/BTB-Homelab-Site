@@ -161,21 +161,35 @@ function ExistingCommentReactions({ comment, variant, busy, onToggle }: CommentR
     {visible.map(option => {
       const reaction = comment.reactions[option.type];
       const selected = reaction.reacted_by_me;
+      const names = formatReactionNames(reaction.users.map(user => user.display_name));
+      const tooltipId = `reaction-${comment.id}-${option.type}`;
       const color = variant === "work"
         ? selected ? "border-[#6bbbf7] bg-[#e1f3ff] text-[#0c5f9c]" : "border-[#d6d9dc] bg-white text-[#3b4045] hover:bg-[#f1f2f3]"
         : selected ? "border-primary/50 bg-primary/15 text-primary" : "border-white/10 bg-white/[.025] text-slate-400 hover:border-white/20 hover:text-slate-200";
-      return <button
-        key={option.type}
-        type="button"
-        aria-label={`${selected ? "Remove" : "Add"} ${option.label} reaction`}
-        aria-pressed={selected}
-        title={`${selected ? "Remove" : "Add"} ${option.label}`}
-        disabled={busy}
-        onClick={() => onToggle(comment, option.type)}
-        className={`inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition disabled:cursor-wait disabled:opacity-60 ${color}`}
-      ><span aria-hidden="true" className="text-sm leading-none">{option.emoji}</span><span className="tabular-nums">{reaction.count}</span></button>;
+      return <span key={option.type} className="group/reaction-users relative inline-flex">
+        <button
+          type="button"
+          aria-label={`${selected ? "Remove" : "Add"} ${option.label} reaction; reacted by ${names}`}
+          aria-describedby={tooltipId}
+          aria-pressed={selected}
+          disabled={busy}
+          onClick={() => onToggle(comment, option.type)}
+          className={`inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition disabled:cursor-wait disabled:opacity-60 ${color}`}
+        ><span aria-hidden="true" className="text-sm leading-none">{option.emoji}</span><span className="tabular-nums">{reaction.count}</span></button>
+        <span
+          id={tooltipId}
+          role="tooltip"
+          className={`pointer-events-none invisible absolute bottom-full left-1/2 z-30 mb-2 w-max max-w-64 -translate-x-1/2 rounded-md px-2.5 py-1.5 text-center text-xs font-medium opacity-0 shadow-xl transition group-hover/reaction-users:visible group-hover/reaction-users:opacity-100 group-focus-within/reaction-users:visible group-focus-within/reaction-users:opacity-100 ${variant === "work" ? "bg-[#232629] text-white" : "border border-white/10 bg-[#090d14] text-slate-100"}`}
+        >{names}</span>
+      </span>;
     })}
   </div>;
+}
+
+function formatReactionNames(names: string[]) {
+  if (names.length <= 1) return names[0] ?? "No one";
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`;
 }
 
 function AddReactionMenu({ comment, variant, busy, onToggle }: CommentReactionControlsProps) {

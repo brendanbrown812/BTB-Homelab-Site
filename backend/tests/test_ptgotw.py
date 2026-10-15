@@ -168,6 +168,10 @@ class PTGOTWTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(reactions["thumbs_up"]["count"], 2)
             self.assertTrue(reactions["thumbs_up"]["reacted_by_me"])
+            self.assertEqual(
+                [user["display_name"] for user in reactions["thumbs_up"]["users"]],
+                ["Admin", "Reader"],
+            )
             self.assertEqual(reactions["heart"]["count"], 1)
             self.assertTrue(reactions["heart"]["reacted_by_me"])
             self.assertEqual(reactions["laughing"]["count"], 0)

@@ -120,7 +120,11 @@ export type PTGComment = {
   author: { id: string; display_name: string; is_admin: boolean } | null;
   created_at: string;
   edited_at: string | null;
-  reactions: Record<PTGCommentReactionType, { count: number; reacted_by_me: boolean }>;
+  reactions: Record<PTGCommentReactionType, {
+    count: number;
+    reacted_by_me: boolean;
+    users: Array<{ id: string; display_name: string }>;
+  }>;
 };
 export type PTGCommentThread = { current_user_id: string; is_admin: boolean; comments: PTGComment[] };
 export type PollOption = { id: string; text: string; position: number; voters: Array<{ id: string; display_name: string }> };

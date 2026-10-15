@@ -146,21 +146,28 @@ async def _comments_payload(db: AsyncSession, writeup_id: uuid.UUID, viewer: Use
                 PTGCommentReaction.comment_id,
                 PTGCommentReaction.user_id,
                 PTGCommentReaction.reaction_type,
+                User.display_name,
             )
             .join(
                 PTGWriteupComment,
                 PTGWriteupComment.id == PTGCommentReaction.comment_id,
             )
+            .join(User, User.id == PTGCommentReaction.user_id)
             .where(PTGWriteupComment.writeup_id == writeup_id)
         )
     ).all()
-    reaction_counts: dict[tuple[uuid.UUID, PTGCommentReactionType], int] = {}
+    reaction_users: dict[tuple[uuid.UUID, PTGCommentReactionType], list[dict]] = {}
     viewer_reactions: set[tuple[uuid.UUID, PTGCommentReactionType]] = set()
-    for comment_id, user_id, reaction_type in reaction_rows:
+    for comment_id, user_id, reaction_type, display_name in reaction_rows:
         key = (comment_id, reaction_type)
-        reaction_counts[key] = reaction_counts.get(key, 0) + 1
+        reaction_users.setdefault(key, []).append({
+            "id": user_id,
+            "display_name": display_name,
+        })
         if user_id == viewer.id:
             viewer_reactions.add(key)
+    for users in reaction_users.values():
+        users.sort(key=lambda user: user["display_name"].casefold())
     comments = []
     for comment, display_name, role in rows:
         deleted = comment.is_deleted
@@ -178,8 +185,9 @@ async def _comments_payload(db: AsyncSession, writeup_id: uuid.UUID, viewer: Use
             "edited_at": comment.edited_at,
             "reactions": {
                 reaction_type.value: {
-                    "count": reaction_counts.get((comment.id, reaction_type), 0),
+                    "count": len(reaction_users.get((comment.id, reaction_type), [])),
                     "reacted_by_me": (comment.id, reaction_type) in viewer_reactions,
+                    "users": reaction_users.get((comment.id, reaction_type), []),
                 }
                 for reaction_type in PTGCommentReactionType
             },
