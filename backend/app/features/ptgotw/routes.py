@@ -6,13 +6,19 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import admin_user, current_user
 from app.database.session import get_db
-from app.features.ptgotw.models import PTGRankingCandidate, PTGWriteup, PTGWriteupComment
+from app.features.ptgotw.models import (
+    PTGCommentReaction,
+    PTGCommentReactionType,
+    PTGRankingCandidate,
+    PTGWriteup,
+    PTGWriteupComment,
+)
 from app.features.ptgotw.notifications import send_writeup_published_notification
 from app.models.user import User, UserRole
 
@@ -77,6 +83,10 @@ class CommentUpdate(BaseModel):
     content: str = Field(min_length=1, max_length=5000)
 
 
+class ReactionUpdate(BaseModel):
+    active: bool
+
+
 def _clean_content(value: str) -> str:
     sanitizer = _WriteupSanitizer()
     sanitizer.feed(value.strip())
@@ -130,6 +140,27 @@ async def _comments_payload(db: AsyncSession, writeup_id: uuid.UUID, viewer: Use
             .order_by(PTGWriteupComment.created_at, PTGWriteupComment.id)
         )
     ).all()
+    reaction_rows = (
+        await db.execute(
+            select(
+                PTGCommentReaction.comment_id,
+                PTGCommentReaction.user_id,
+                PTGCommentReaction.reaction_type,
+            )
+            .join(
+                PTGWriteupComment,
+                PTGWriteupComment.id == PTGCommentReaction.comment_id,
+            )
+            .where(PTGWriteupComment.writeup_id == writeup_id)
+        )
+    ).all()
+    reaction_counts: dict[tuple[uuid.UUID, PTGCommentReactionType], int] = {}
+    viewer_reactions: set[tuple[uuid.UUID, PTGCommentReactionType]] = set()
+    for comment_id, user_id, reaction_type in reaction_rows:
+        key = (comment_id, reaction_type)
+        reaction_counts[key] = reaction_counts.get(key, 0) + 1
+        if user_id == viewer.id:
+            viewer_reactions.add(key)
     comments = []
     for comment, display_name, role in rows:
         deleted = comment.is_deleted
@@ -145,6 +176,13 @@ async def _comments_payload(db: AsyncSession, writeup_id: uuid.UUID, viewer: Use
             },
             "created_at": comment.created_at,
             "edited_at": comment.edited_at,
+            "reactions": {
+                reaction_type.value: {
+                    "count": reaction_counts.get((comment.id, reaction_type), 0),
+                    "reacted_by_me": (comment.id, reaction_type) in viewer_reactions,
+                }
+                for reaction_type in PTGCommentReactionType
+            },
         })
     return {"current_user_id": viewer.id, "is_admin": viewer.role is UserRole.admin, "comments": comments}
 
@@ -334,6 +372,40 @@ async def update_comment(writeup_id: uuid.UUID, comment_id: uuid.UUID, body: Com
     return await _comments_payload(db, writeup_id, user)
 
 
+@router.put("/{writeup_id}/comments/{comment_id}/reactions/{reaction_type}")
+async def set_comment_reaction(
+    writeup_id: uuid.UUID,
+    comment_id: uuid.UUID,
+    reaction_type: PTGCommentReactionType,
+    body: ReactionUpdate,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _published_writeup(db, writeup_id)
+    comment = await db.get(PTGWriteupComment, comment_id, with_for_update=True)
+    if not comment or comment.writeup_id != writeup_id:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if comment.is_deleted:
+        raise HTTPException(status_code=409, detail="Deleted comments cannot receive reactions")
+    existing = await db.scalar(
+        select(PTGCommentReaction).where(
+            PTGCommentReaction.comment_id == comment_id,
+            PTGCommentReaction.user_id == user.id,
+            PTGCommentReaction.reaction_type == reaction_type,
+        )
+    )
+    if body.active and existing is None:
+        db.add(PTGCommentReaction(
+            comment_id=comment_id,
+            user_id=user.id,
+            reaction_type=reaction_type,
+        ))
+    elif not body.active and existing is not None:
+        await db.delete(existing)
+    await db.commit()
+    return await _comments_payload(db, writeup_id, user)
+
+
 @router.delete("/{writeup_id}/comments/{comment_id}")
 async def delete_comment(writeup_id: uuid.UUID, comment_id: uuid.UUID, admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)):
     await _published_writeup(db, writeup_id)
@@ -343,6 +415,9 @@ async def delete_comment(writeup_id: uuid.UUID, comment_id: uuid.UUID, admin: Us
     if not comment.is_deleted:
         comment.content = ""
         comment.is_deleted = True
+        await db.execute(
+            delete(PTGCommentReaction).where(PTGCommentReaction.comment_id == comment_id)
+        )
         await db.commit()
     return await _comments_payload(db, writeup_id, admin)
 

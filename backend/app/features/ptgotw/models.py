@@ -40,6 +40,39 @@ class PTGWriteupComment(Base):
     edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class PTGCommentReactionType(str, enum.Enum):
+    thumbs_up = "thumbs_up"
+    thumbs_down = "thumbs_down"
+    heart = "heart"
+    laughing = "laughing"
+
+
+class PTGCommentReaction(Base):
+    __tablename__ = "ptgotw_comment_reactions"
+    __table_args__ = (
+        UniqueConstraint(
+            "comment_id",
+            "user_id",
+            "reaction_type",
+            name="uq_ptgotw_comment_reaction_user_type",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    comment_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("ptgotw_comments.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    reaction_type: Mapped[PTGCommentReactionType] = mapped_column(
+        Enum(PTGCommentReactionType)
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class PTGRankingBallotStatus(str, enum.Enum):
     draft = "draft"
     submitted = "submitted"

@@ -6,8 +6,8 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.database.base import Base
-from app.features.ptgotw.models import PTGWriteup
-from app.features.ptgotw.routes import CommentCreate, CommentUpdate, WriteupCreate, WriteupUpdate, _author_edit_window_open, _author_publish_window_open, _clean_content, create_comment, create_writeup, delete_comment, delete_writeup, editable_writeups, get_writeup, list_comments, list_writeups, upcoming_writeup, update_comment, update_writeup
+from app.features.ptgotw.models import PTGCommentReactionType, PTGWriteup
+from app.features.ptgotw.routes import CommentCreate, CommentUpdate, ReactionUpdate, WriteupCreate, WriteupUpdate, _author_edit_window_open, _author_publish_window_open, _clean_content, create_comment, create_writeup, delete_comment, delete_writeup, editable_writeups, get_writeup, list_comments, list_writeups, set_comment_reaction, upcoming_writeup, update_comment, update_writeup
 from app.models.user import User, UserRole
 
 
@@ -149,6 +149,48 @@ class PTGOTWTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(updated["comments"][1]["parent_id"], parent_id)
             self.assertEqual(updated["comments"][1]["content"], "Really good point")
             self.assertIsNotNone(updated["comments"][1]["edited_at"])
+
+    async def test_comment_reactions_are_counted_per_type_and_toggle_per_user(self):
+        async with self.sessions() as db:
+            admin = User(username="admin", display_name="Admin", role=UserRole.admin, is_active=True)
+            author = User(username="writer", display_name="Writer", role=UserRole.user, is_active=True)
+            reader = User(username="reader", display_name="Reader", role=UserRole.user, is_active=True)
+            db.add_all([admin, author, reader]); await db.commit()
+            writeup = await create_writeup(WriteupCreate(year=2026, week=14, author_id=author.id, content_html="Published", is_published=True), admin=admin, db=db)
+            thread = await create_comment(writeup["id"], CommentCreate(content="Great breakdown"), user=author, db=db)
+            comment_id = thread["comments"][0]["id"]
+
+            await set_comment_reaction(writeup["id"], comment_id, PTGCommentReactionType.thumbs_up, ReactionUpdate(active=True), reader, db)
+            await set_comment_reaction(writeup["id"], comment_id, PTGCommentReactionType.thumbs_up, ReactionUpdate(active=True), admin, db)
+            await set_comment_reaction(writeup["id"], comment_id, PTGCommentReactionType.heart, ReactionUpdate(active=True), reader, db)
+            reader_view = await list_comments(writeup["id"], user=reader, db=db)
+            reactions = reader_view["comments"][0]["reactions"]
+
+            self.assertEqual(reactions["thumbs_up"]["count"], 2)
+            self.assertTrue(reactions["thumbs_up"]["reacted_by_me"])
+            self.assertEqual(reactions["heart"]["count"], 1)
+            self.assertTrue(reactions["heart"]["reacted_by_me"])
+            self.assertEqual(reactions["laughing"]["count"], 0)
+
+            toggled = await set_comment_reaction(writeup["id"], comment_id, PTGCommentReactionType.thumbs_up, ReactionUpdate(active=False), reader, db)
+            self.assertEqual(toggled["comments"][0]["reactions"]["thumbs_up"]["count"], 1)
+            self.assertFalse(toggled["comments"][0]["reactions"]["thumbs_up"]["reacted_by_me"])
+
+    async def test_deleted_comments_cannot_receive_reactions(self):
+        async with self.sessions() as db:
+            admin = User(username="admin", display_name="Admin", role=UserRole.admin, is_active=True)
+            author = User(username="writer", display_name="Writer", role=UserRole.user, is_active=True)
+            db.add_all([admin, author]); await db.commit()
+            writeup = await create_writeup(WriteupCreate(year=2026, week=15, author_id=author.id, content_html="Published", is_published=True), admin=admin, db=db)
+            thread = await create_comment(writeup["id"], CommentCreate(content="Remove me"), user=author, db=db)
+            comment_id = thread["comments"][0]["id"]
+            await set_comment_reaction(writeup["id"], comment_id, PTGCommentReactionType.heart, ReactionUpdate(active=True), author, db)
+            deleted = await delete_comment(writeup["id"], comment_id, admin=admin, db=db)
+            self.assertEqual(deleted["comments"][0]["reactions"]["heart"]["count"], 0)
+
+            with self.assertRaises(HTTPException) as error:
+                await set_comment_reaction(writeup["id"], comment_id, PTGCommentReactionType.laughing, ReactionUpdate(active=True), author, db)
+            self.assertEqual(error.exception.status_code, 409)
 
     async def test_admin_deletion_keeps_replies_as_a_tombstone(self):
         async with self.sessions() as db:

@@ -8,6 +8,7 @@ from app.models.user import User  # noqa: F401
 from app.models.season import Season  # noqa: F401
 from app.features.predictions.models import Prediction, PredictionMatchup, PredictionWeek  # noqa: F401
 from app.features.ptgotw.models import (  # noqa: F401
+    PTGCommentReaction,
     PTGRankingBallot,
     PTGRankingCandidate,
     PTGRankingItem,
