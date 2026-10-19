@@ -18,18 +18,28 @@ def projected_points(stats: dict, scoring: dict) -> float | None:
     return total
 
 
-def starter_projection(player_ids: list[str], projections: dict[str, dict], scoring: dict) -> float | None:
+def starter_projection(
+    player_ids: list[str],
+    projections: dict[str, dict],
+    scoring: dict,
+    zero_projection_player_ids: set[str] | None = None,
+) -> float | None:
     if not player_ids or not scoring:
         return None
+    zero_projection_player_ids = zero_projection_player_ids or set()
     total = 0.0
     for player_id in player_ids:
         if player_id == "0":
             continue
         stats = projections.get(player_id)
         if not isinstance(stats, dict):
+            if player_id in zero_projection_player_ids:
+                continue
             return None
         points = projected_points(stats, scoring)
         if points is None:
+            if player_id in zero_projection_player_ids:
+                continue
             return None
         total += points
     return round(total, 2)

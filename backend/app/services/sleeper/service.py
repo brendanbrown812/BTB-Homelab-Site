@@ -298,7 +298,16 @@ class SleeperService:
                 stats = cached[1]
         scoring = league.get("scoring_settings") or {}
         roster_scores = {
-            roster_id: starter_projection([player.player_id for player in starters], stats, scoring)
+            roster_id: starter_projection(
+                [player.player_id for player in starters],
+                stats,
+                scoring,
+                {
+                    player.player_id
+                    for player in starters
+                    if (getattr(player, "injury_status", None) or "").casefold() == "out"
+                },
+            )
             for matchup in matchups
             for roster_id, starters in ((matchup.roster_a, matchup.team_a_starters), (matchup.roster_b, matchup.team_b_starters))
         }

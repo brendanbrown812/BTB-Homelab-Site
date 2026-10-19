@@ -21,6 +21,30 @@ class ProjectionScoringTests(unittest.TestCase):
         self.assertIsNone(starter_projection([], projections, scoring))
         self.assertIsNone(starter_projection(["1"], projections, {}))
 
+    def test_out_starter_without_weekly_projection_counts_as_zero(self):
+        projections = {"active": {"rec": 4, "rec_yd": 60}, "out": {"adp_dd_ppr": 100}}
+        scoring = {"rec": .5, "rec_yd": .1}
+
+        self.assertEqual(
+            starter_projection(
+                ["active", "out"],
+                projections,
+                scoring,
+                zero_projection_player_ids={"out"},
+            ),
+            8,
+        )
+        self.assertEqual(
+            starter_projection(
+                ["active", "missing-out"],
+                projections,
+                scoring,
+                zero_projection_player_ids={"missing-out"},
+            ),
+            8,
+        )
+        self.assertIsNone(starter_projection(["active", "out"], projections, scoring))
+
     def test_zero_negative_and_metadata_only_rows(self):
         self.assertEqual(projected_points({"pts_half_ppr": 0}, {"rec": .5}), 0)
         self.assertEqual(projected_points({"fum_lost": 1}, {"fum_lost": -2}), -2)
@@ -45,14 +69,17 @@ class ProjectionServiceTests(unittest.IsolatedAsyncioTestCase):
         matchups = [SimpleNamespace(
             roster_a=1,
             roster_b=2,
-            team_a_starters=[SimpleNamespace(player_id="1")],
+            team_a_starters=[
+                SimpleNamespace(player_id="1", injury_status=None),
+                SimpleNamespace(player_id="out", injury_status="Out"),
+            ],
             team_a_bench=[SimpleNamespace(player_id="bench")],
             team_b_starters=[SimpleNamespace(player_id="missing")],
             team_b_bench=[],
         )]
         projection = await adapter.weekly_projections("league", 3, matchups)
         self.assertEqual(projection.rosters, {1: 2, 2: None})
-        self.assertEqual(projection.players, {"1": 2, "bench": None, "missing": None})
+        self.assertEqual(projection.players, {"1": 2, "out": None, "bench": None, "missing": None})
         client.league.return_value["scoring_settings"] = {"rec": 1}
         self.assertEqual((await adapter.projected_matchup_scores("other-league", 3, matchups))[1], 4)
         self.assertEqual(client.projections.await_count, 1)
