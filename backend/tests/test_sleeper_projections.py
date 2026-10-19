@@ -72,14 +72,18 @@ class ProjectionServiceTests(unittest.IsolatedAsyncioTestCase):
             team_a_starters=[
                 SimpleNamespace(player_id="1", injury_status=None),
                 SimpleNamespace(player_id="out", injury_status="Out"),
+                SimpleNamespace(player_id="na", injury_status="NA"),
             ],
             team_a_bench=[SimpleNamespace(player_id="bench")],
-            team_b_starters=[SimpleNamespace(player_id="missing")],
+            team_b_starters=[SimpleNamespace(player_id="missing", injury_status="Questionable")],
             team_b_bench=[],
         )]
         projection = await adapter.weekly_projections("league", 3, matchups)
         self.assertEqual(projection.rosters, {1: 2, 2: None})
-        self.assertEqual(projection.players, {"1": 2, "out": None, "bench": None, "missing": None})
+        self.assertEqual(
+            projection.players,
+            {"1": 2, "out": None, "na": None, "bench": None, "missing": None},
+        )
         client.league.return_value["scoring_settings"] = {"rec": 1}
         self.assertEqual((await adapter.projected_matchup_scores("other-league", 3, matchups))[1], 4)
         self.assertEqual(client.projections.await_count, 1)

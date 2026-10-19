@@ -305,7 +305,7 @@ class SleeperService:
                 {
                     player.player_id
                     for player in starters
-                    if (getattr(player, "injury_status", None) or "").casefold() == "out"
+                    if (getattr(player, "injury_status", None) or "").casefold() in {"out", "na"}
                 },
             )
             for matchup in matchups
